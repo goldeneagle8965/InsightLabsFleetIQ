@@ -1,0 +1,582 @@
+{
+  "tick_limit": 800,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "policy": "ubpa",
+  "note": "Each row is the shipped code with exactly one CoordinationFlags switch moved. read-only attribution; no monkeypatching.",
+  "scenarios": {
+    "e1_clean": {
+      "shipped": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 93,
+          "complete_tick_max": 93,
+          "complete_tick_mean": 93,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.46,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 93.0
+        },
+        "wall_seconds": 0.2
+      },
+      "all_off": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 72,
+          "complete_tick_max": 72,
+          "complete_tick_mean": 72,
+          "collision_count_mean": 2.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.42,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 72.0
+        },
+        "wall_seconds": 0.1
+      },
+      "no_rc1_reannounce": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 93,
+          "complete_tick_max": 93,
+          "complete_tick_mean": 93,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.46,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 93.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc2_age_corrected": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 72,
+          "complete_tick_max": 72,
+          "complete_tick_mean": 72,
+          "collision_count_mean": 2.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.42,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 72.0
+        },
+        "wall_seconds": 0.1
+      },
+      "no_rc3_stall_detector": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 93,
+          "complete_tick_max": 93,
+          "complete_tick_mean": 93,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.46,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 93.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc4_claims": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 93,
+          "complete_tick_max": 93,
+          "complete_tick_mean": 93,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.46,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 93.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc5_stall_handoff": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 93,
+          "complete_tick_max": 93,
+          "complete_tick_mean": 93,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.46,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 93.0
+        },
+        "wall_seconds": 0.2
+      }
+    },
+    "delay3": {
+      "shipped": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 103,
+          "complete_tick_max": 103,
+          "complete_tick_mean": 103,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.48,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 103.0
+        },
+        "wall_seconds": 0.2
+      },
+      "all_off": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 3,
+          "tasks_done_max": 3,
+          "tasks_total": 6,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 577.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.79,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 1.7
+      },
+      "no_rc1_reannounce": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 103,
+          "complete_tick_max": 103,
+          "complete_tick_mean": 103,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.48,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 103.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc2_age_corrected": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 94,
+          "complete_tick_max": 94,
+          "complete_tick_mean": 94,
+          "collision_count_mean": 3.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.47,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 94.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc3_stall_detector": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 103,
+          "complete_tick_max": 103,
+          "complete_tick_mean": 103,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.48,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 103.0
+        },
+        "wall_seconds": 0.2
+      },
+      "no_rc4_claims": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 5,
+          "tasks_done_max": 5,
+          "tasks_total": 6,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 1.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.94,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 0.6
+      },
+      "no_rc5_stall_handoff": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 103,
+          "complete_tick_max": 103,
+          "complete_tick_mean": 103,
+          "collision_count_mean": 0.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.48,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 103.0
+        },
+        "wall_seconds": 0.2
+      }
+    },
+    "loss70": {
+      "shipped": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 141,
+          "complete_tick_max": 213,
+          "complete_tick_mean": 188,
+          "collision_count_mean": 1.0,
+          "deadlock_count_mean": 0.6,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.36,
+          "packets_dropped_mean": 1368.6,
+          "ticks_mean": 188.2
+        },
+        "wall_seconds": 0.4
+      },
+      "all_off": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 1,
+          "tasks_done_max": 5,
+          "tasks_total": 6,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 3.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 1.2,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.94,
+          "packets_dropped_mean": 5106.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 0.6
+      },
+      "no_rc1_reannounce": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 2,
+          "tasks_done_max": 5,
+          "tasks_total": 6,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 1.4,
+          "deadlock_count_mean": 2.0,
+          "stall_count_mean": 1.2,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.9,
+          "packets_dropped_mean": 5138.2,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 0.5
+      },
+      "no_rc2_age_corrected": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 127,
+          "complete_tick_max": 186,
+          "complete_tick_mean": 157,
+          "collision_count_mean": 9.0,
+          "deadlock_count_mean": 0.6,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.38,
+          "packets_dropped_mean": 1135.4,
+          "ticks_mean": 156.8
+        },
+        "wall_seconds": 0.3
+      },
+      "no_rc3_stall_detector": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 141,
+          "complete_tick_max": 213,
+          "complete_tick_mean": 187,
+          "collision_count_mean": 1.4,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.36,
+          "packets_dropped_mean": 1359.8,
+          "ticks_mean": 187.2
+        },
+        "wall_seconds": 0.3
+      },
+      "no_rc4_claims": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 111,
+          "complete_tick_max": 212,
+          "complete_tick_mean": 168,
+          "collision_count_mean": 2.6,
+          "deadlock_count_mean": 0.6,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.43,
+          "packets_dropped_mean": 1207.8,
+          "ticks_mean": 168.0
+        },
+        "wall_seconds": 0.3
+      },
+      "no_rc5_stall_handoff": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 6,
+          "tasks_done_max": 6,
+          "tasks_total": 6,
+          "complete_tick_min": 141,
+          "complete_tick_max": 213,
+          "complete_tick_mean": 188,
+          "collision_count_mean": 1.0,
+          "deadlock_count_mean": 0.6,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.36,
+          "packets_dropped_mean": 1368.6,
+          "ticks_mean": 188.2
+        },
+        "wall_seconds": 0.4
+      }
+    },
+    "scale8": {
+      "shipped": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 16,
+          "tasks_done_max": 16,
+          "tasks_total": 16,
+          "complete_tick_min": 327,
+          "complete_tick_max": 327,
+          "complete_tick_mean": 327,
+          "collision_count_mean": 13.0,
+          "deadlock_count_mean": 14.0,
+          "stall_count_mean": 1.0,
+          "stall_handoff_count_mean": 2.0,
+          "mean_wait_ticks_mean": 0.78,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 327.0
+        },
+        "wall_seconds": 1.9
+      },
+      "all_off": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 3,
+          "tasks_done_max": 3,
+          "tasks_total": 16,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 1096.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.82,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 6.5
+      },
+      "no_rc1_reannounce": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 16,
+          "tasks_done_max": 16,
+          "tasks_total": 16,
+          "complete_tick_min": 327,
+          "complete_tick_max": 327,
+          "complete_tick_mean": 327,
+          "collision_count_mean": 13.0,
+          "deadlock_count_mean": 14.0,
+          "stall_count_mean": 1.0,
+          "stall_handoff_count_mean": 2.0,
+          "mean_wait_ticks_mean": 0.78,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 327.0
+        },
+        "wall_seconds": 1.9
+      },
+      "no_rc2_age_corrected": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 12,
+          "tasks_done_max": 12,
+          "tasks_total": 16,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 105.0,
+          "deadlock_count_mean": 12.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 2.0,
+          "mean_wait_ticks_mean": 0.71,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 5.1
+      },
+      "no_rc3_stall_detector": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 10,
+          "tasks_done_max": 10,
+          "tasks_total": 16,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 13.0,
+          "deadlock_count_mean": 0.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.88,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 5.8
+      },
+      "no_rc4_claims": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 5,
+          "tasks_done_min": 16,
+          "tasks_done_max": 16,
+          "tasks_total": 16,
+          "complete_tick_min": 327,
+          "complete_tick_max": 327,
+          "complete_tick_mean": 327,
+          "collision_count_mean": 13.0,
+          "deadlock_count_mean": 14.0,
+          "stall_count_mean": 1.0,
+          "stall_handoff_count_mean": 2.0,
+          "mean_wait_ticks_mean": 0.78,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 327.0
+        },
+        "wall_seconds": 1.9
+      },
+      "no_rc5_stall_handoff": {
+        "summary": {
+          "runs": 5,
+          "finished_runs": 0,
+          "tasks_done_min": 14,
+          "tasks_done_max": 14,
+          "tasks_total": 16,
+          "complete_tick_min": null,
+          "complete_tick_max": null,
+          "complete_tick_mean": null,
+          "collision_count_mean": 13.0,
+          "deadlock_count_mean": 37.0,
+          "stall_count_mean": 0.0,
+          "stall_handoff_count_mean": 0.0,
+          "mean_wait_ticks_mean": 0.91,
+          "packets_dropped_mean": 0.0,
+          "ticks_mean": 800.0
+        },
+        "wall_seconds": 4.1
+      }
+    }
+  }
+}

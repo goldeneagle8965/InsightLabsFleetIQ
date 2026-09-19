@@ -69,6 +69,8 @@ def summarize(rows: list[dict]) -> dict:
         "complete_tick_max": max(ticks) if ticks else None,
         "complete_tick_mean": int(round(statistics.fmean(ticks))) if ticks else None,
         "deadlock_count_mean": avg("deadlock_count"),
+        "stall_count_mean": avg("stall_count"),
+        "stall_handoff_count_mean": avg("stall_handoff_count"),
         "collision_count_mean": avg("collision_count"),
         "packets_dropped_mean": avg("packets_dropped"),
         "mean_comm_latency_ticks_mean": avg("mean_comm_latency_ticks"),
@@ -112,6 +114,7 @@ def main() -> None:
         print(
             f"  {label:<15} tasks {s['tasks_done_min']}-{s['tasks_done_max']}/{s['tasks_total']} "
             f"| finish {ticks} | deadlocks {s['deadlock_count_mean']} "
+            f"| stalls {s['stall_count_mean']} | handoffs {s['stall_handoff_count_mean']} "
             f"| coll_events {s['collision_count_mean']} | dropped {s['packets_dropped_mean']}"
         )
 

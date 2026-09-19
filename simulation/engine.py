@@ -7,7 +7,14 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from simulation.config import MAX_TICKS_DEMO, RADIO_DELAY, TICK_HZ
+from simulation.config import (
+    MAX_TICKS_DEMO,
+    RADIO_DELAY,
+    STALL_WINDOW,
+    TASK_REANNOUNCE_TICKS,
+    TICK_HZ,
+    CoordinationFlags,
+)
 from simulation.metrics import RunMetrics
 from simulation.peer import MSG_TASK_ANNOUNCE, PeerBus
 from simulation.robot import Robot
@@ -30,6 +37,9 @@ class FleetSim:
     announce_at: int = 4
     forced_block: tuple[int, int] | None = None
     forced_block_tick: int | None = None
+    # Ablation switches (see CoordinationFlags). Defaults are the shipped fixes;
+    # every one can be turned off and the same scenarios re-measured.
+    flags: CoordinationFlags = field(default_factory=CoordinationFlags)
     world: Warehouse = field(init=False)
     bus: PeerBus = field(init=False)
     robots: list[Robot] = field(init=False)
@@ -38,6 +48,11 @@ class FleetSim:
     events: list[dict[str, Any]] = field(default_factory=list)
     _announced: bool = False
     _rng: random.Random = field(init=False)
+    _last_announce_tick: int = 0
+    _last_progress_tick: int = 0
+    _done_mark: int = 0
+    _stall_marked: bool = False
+    _stall_episodes: int = 0
 
     def __post_init__(self) -> None:
         self.reset()
@@ -50,6 +65,11 @@ class FleetSim:
         self.paused = False
         self.events = []
         self._announced = False
+        self._last_announce_tick = 0
+        self._last_progress_tick = 0
+        self._done_mark = 0
+        self._stall_marked = False
+        self._stall_episodes = 0
         jobs = self.tasks if self.tasks is not None else default_tasks()
         self.world.tasks = {t.task_id: copy.copy(t) for t in jobs}
         spawns = self.spawn if self.spawn is not None else spawn_positions()
@@ -58,7 +78,9 @@ class FleetSim:
             rid = f"R{i + 1}"
             pos = spawns[i % len(spawns)]
             self.world.robots[rid] = pos
-            bot = Robot(rid, pos, self.world, self.bus, priority=1, policy=self.policy)
+            bot = Robot(
+                rid, pos, self.world, self.bus, priority=1, policy=self.policy, flags=self.flags
+            )
             self.bus.register(rid)
             self.robots.append(bot)
         # WMS bulletin is not a robot; register a sender id so broadcasts work
@@ -81,6 +103,8 @@ class FleetSim:
         if not self._announced and self.tick >= self.announce_at:
             self._announce_tasks()
             self._announced = True
+        else:
+            self._reannounce_unheard()
 
         self.bus.tick(self.tick)
         intentions: dict[str, tuple[int, int]] = {}
@@ -92,6 +116,7 @@ class FleetSim:
             self.events.extend(bot.events)
             bot.events = []
         self._sync_task_board()
+        self._watch_progress()
 
     def run_until(
         self,
@@ -204,6 +229,8 @@ class FleetSim:
         return RunMetrics(
             collision_count=self.world.collision_events,
             deadlock_count=deadlocks,
+            stall_count=self._stall_episodes,
+            stall_handoff_count=sum(b.stall_handoffs for b in self.robots),
             all_tasks_complete_tick=complete_tick,
             mean_wait_ticks=mean_wait,
             total_distance=dist,
@@ -217,7 +244,82 @@ class FleetSim:
             seed=self.seed,
         )
 
+    def _reannounce_unheard(self) -> None:
+        """WMS repeats a bulletin that at least one robot has never heard (RC1).
+
+        One announcement plus heavy loss means every robot can miss the same
+        task, and nothing ever repeats it: the auction then has nothing to bid
+        on and the task is dead for the whole run. This is idempotent -- robots
+        that already know the task keep their holder and status.
+        """
+        if not self.flags.task_reannounce or not self._announced:
+            return
+        if self.tick - self._last_announce_tick < TASK_REANNOUNCE_TICKS:
+            return
+        unheard = [
+            t
+            for t in self.world.tasks.values()
+            if t.status != "DONE"
+            and any(t.task_id not in bot.known_tasks for bot in self.robots)
+        ]
+        if not unheard:
+            return
+        self._last_announce_tick = self.tick
+        for t in unheard:
+            self.bus.broadcast(
+                "WMS",
+                {
+                    "type": MSG_TASK_ANNOUNCE,
+                    "task_id": t.task_id,
+                    "pick": list(t.pick),
+                    "drop": list(t.drop),
+                    "urgency": t.urgency,
+                },
+                self.tick,
+            )
+        self.events.append(
+            {
+                "tick": self.tick,
+                "robot": "WMS",
+                "kind": "reannounce",
+                "detail": f"{len(unheard)} tasks unheard",
+            }
+        )
+
+    def _watch_progress(self) -> None:
+        """Fleet-level stall episodes, counted for both policies.
+
+        Liveness used to be inferred from each robot's conflict counter, which
+        UBPA barely touched, so a frozen fleet reported zero deadlocks. Here the
+        yardstick is completion or movement: no task finished and no robot moved
+        for STALL_WINDOW ticks while work is outstanding.
+        """
+        if not self._announced:
+            return
+        done = sum(1 for t in self.world.tasks.values() if t.status == "DONE")
+        moved = any(b.velocity != (0, 0) for b in self.robots)
+        if done > self._done_mark or moved or done == len(self.world.tasks):
+            self._done_mark = done
+            self._last_progress_tick = self.tick
+            self._stall_marked = False
+            return
+        if self._stall_marked:
+            return
+        if self.tick - self._last_progress_tick >= STALL_WINDOW:
+            self._stall_marked = True
+            self._stall_episodes += 1
+            self.events.append(
+                {
+                    "tick": self.tick,
+                    "robot": "FLEET",
+                    "kind": "stall",
+                    "detail": f"no progress for {STALL_WINDOW} ticks ({done}/{len(self.world.tasks)} done)",
+                }
+            )
+
     def _announce_tasks(self) -> None:
+        self._last_announce_tick = self.tick
+        self._last_progress_tick = self.tick
         for t in self.world.tasks.values():
             t.announced_tick = self.tick
             t.status = "OPEN"

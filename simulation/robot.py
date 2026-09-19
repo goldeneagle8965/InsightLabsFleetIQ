@@ -18,6 +18,9 @@ from simulation.config import (
     CHARGE_RATE,
     CHARGE_RESUME,
     CHARGE_THRESHOLD,
+    CLAIM_GRACE_TICKS,
+    CLAIM_REASSERT_TICKS,
+    CLAIM_SILENT_TICKS,
     DRAIN_MOVE,
     DRAIN_WAIT,
     DROP_TICKS,
@@ -26,6 +29,9 @@ from simulation.config import (
     PATH_HORIZON,
     PEER_STALE_TICKS,
     PICK_TICKS,
+    STALL_COOLDOWN_TICKS,
+    STALL_HANDOFF_EPISODES,
+    STALL_WINDOW,
     STALEMATE_TICKS,
     UBPA_A,
     UBPA_B,
@@ -33,6 +39,7 @@ from simulation.config import (
     UBPA_U,
     UNREACHABLE_TICKS,
     YIELD_WAIT,
+    CoordinationFlags,
 )
 from simulation.peer import (
     MSG_BID,
@@ -98,6 +105,7 @@ class Robot:
         bus: PeerBus,
         priority: int = 1,
         policy: str = "ubpa",
+        flags: CoordinationFlags | None = None,
     ) -> None:
         self.id = robot_id
         self.pos = pos
@@ -105,6 +113,7 @@ class Robot:
         self.bus = bus
         self.priority = priority
         self.policy = policy  # "ubpa" | "stop_wait"
+        self.flags = flags or CoordinationFlags()
         self.battery = BATTERY_START
         self.status = "IDLE"
         self.current_task: str | None = None
@@ -121,6 +130,30 @@ class Robot:
         self.yield_wait_left = 0
         self.dwell = 0
         self.stuck_ticks = 0
+        # Movement-stall watch (RC3). Distinct from stuck_ticks: that one only
+        # counted ticks inside a *path* conflict, so a robot wedged behind a
+        # peer's occupied cell never incremented it and liveness looked perfect.
+        self.stalled_ticks = 0
+        self.stall_recoveries = 0
+        # Stall hand-back (RC5). Re-planning alone cannot break two holders that
+        # keep routing into the same contested junction: they re-plan into each
+        # other forever. After STALL_HANDOFF_EPISODES the holder gives the task
+        # back, and its own bid is suppressed for a cooldown so the fleet retries
+        # the work from a different position.
+        self.stall_episodes = 0
+        self.stall_task: str | None = None
+        self.stall_handoffs = 0
+        self.task_cooldown: dict[str, int] = {}
+        # Claim bookkeeping (RC4).
+        self.claim_cost = 1e9
+        self.claim_sent_tick = -1
+        self.claim_reasserts = 0
+        self.claim_stale = 0
+        self.claim_silent = 0
+        self.claim_conflicts = 0
+        self.claim_grace: dict[str, int] = {}
+        self.claim_heard: dict[str, int] = {}
+        self.done_seen: set[str] = set()
         self.unreachable_ticks = 0
         self.wait_streak = 0
         self.deadlock_events = 0
@@ -146,12 +179,14 @@ class Robot:
         self._ingest(tick)
         self._sense_and_share(tick)
         self._drop_stale_peers(tick)
+        self._check_claims(tick)
         self._maybe_charge(tick)
         self._auction(tick)
         self._progress_task(tick)
         self._choose_goal()
         self._plan(tick)
         self._resolve_conflict(tick)
+        self._check_stall(tick)
         intention = self._choose_move(tick)
         self._broadcast_state(tick)
         dt = (time.perf_counter() - t0) * 1000.0
@@ -168,10 +203,12 @@ class Robot:
             self.velocity = (new_pos[0] - old[0], new_pos[1] - old[1])
             self.wait_streak = 0
             self.stuck_ticks = 0
+            self.stalled_ticks = 0
             self.battery = max(0.0, self.battery - DRAIN_MOVE)
         else:
             self.wait_ticks += 1
             self.wait_streak += 1
+            self.stalled_ticks += 1
             self.velocity = (0, 0)
             if self.phase == "CHARGING" and self.pos == self.world.charger:
                 self.battery = min(100.0, self.battery + CHARGE_RATE)
@@ -209,6 +246,9 @@ class Robot:
     def _ingest(self, tick: int) -> None:
         for msg in self.bus.receive(self.id):
             kind = msg.get("type")
+            sender = msg.get("from_id")
+            if sender and str(sender) != self.id:
+                self._touch_claims_held_by(str(sender), tick)
             if kind == MSG_PEER_STATE:
                 ps = PeerState.from_msg(msg)
                 if ps.robot_id != self.id:
@@ -218,7 +258,7 @@ class Robot:
             elif kind == MSG_BID:
                 self._note_bid(msg, tick)
             elif kind == MSG_CLAIM:
-                self._note_claim(msg)
+                self._note_claim(msg, tick)
             elif kind == MSG_RELEASE:
                 self._note_release(msg, tick)
             elif kind == MSG_OBSTACLE:
@@ -255,22 +295,54 @@ class Robot:
         valid = bool(msg.get("valid", False))
         auc.bids[str(msg.get("from_id"))] = (cost, valid)
 
-    def _note_claim(self, msg: dict[str, Any]) -> None:
+    def _note_claim(self, msg: dict[str, Any], tick: int) -> None:
         tid = str(msg["task_id"])
         holder = str(msg.get("from_id"))
         if tid not in self.known_tasks:
             self._note_task(msg)
         kt = self.known_tasks[tid]
+        if msg.get("done"):
+            self.done_seen.add(tid)
+        elif (
+            self.flags.claim_arbitration
+            and self.current_task == tid
+            and holder != self.id
+        ):
+            # Two robots can win the same auction whenever a bid packet is lost.
+            # Both sides see the same two numbers, so a deterministic
+            # (cost, robot_id) order settles it: the lower pair keeps the work
+            # and the other abandons it, instead of both walking off and leaving
+            # the task orphaned for the rest of the run.
+            theirs = float(msg.get("cost", 1e9))
+            mine = float(self.claim_cost)
+            self.claim_conflicts += 1
+            if (mine, self.id) < (theirs, holder):
+                if tick - self.claim_sent_tick >= CLAIM_REASSERT_TICKS:
+                    self._send_claim(tid, tick, reassert=True)
+                return
+            self._event(tick, "claim_lost", f"{tid} -> {holder}")
+            self._abandon_claim(tid)
         kt.holder = holder
         kt.status = "CLAIMED"
         auc = self.auctions.get(tid)
         if auc:
             auc.closed = True
         if holder != self.id and self.current_task == tid:
-            self.current_task = None
-            self.task_urgency = 0.0
-            self.phase = "IDLE"
-            self.goal = None
+            self._abandon_claim(tid)
+
+    def _abandon_claim(self, tid: str) -> None:
+        """Drop our own task slot without saying the task went back to OPEN.
+
+        A RELEASE here would advertise the work as free again and start a second
+        auction for a task another robot is already running.
+        """
+        if self.current_task != tid:
+            return
+        self.current_task = None
+        self.task_urgency = 0.0
+        self.phase = "IDLE"
+        self.goal = None
+        self.claim_cost = 1e9
 
     def _note_release(self, msg: dict[str, Any], tick: int) -> None:
         tid = str(msg["task_id"])
@@ -416,6 +488,8 @@ class Robot:
                 self.phase = "IDLE"
                 self.goal = None
                 self.planned_path = [self.pos]
+                self.stall_episodes = 0
+                self.stall_task = None
 
     def _choose_goal(self) -> None:
         if self.phase == "YIELDING":
@@ -446,6 +520,8 @@ class Robot:
         if self.current_task is None and self.phase in ("IDLE", "TO_PICK"):
             for kt in self.known_tasks.values():
                 if kt.status in ("OPEN", "RELEASED") and kt.holder is None:
+                    if self._on_cooldown(kt.task_id, tick):
+                        continue
                     self._ensure_bid(kt, tick)
         for tid, auc in list(self.auctions.items()):
             kt = self.known_tasks.get(tid)
@@ -465,6 +541,10 @@ class Robot:
             winner = self._winner(auc)
             auc.closed = True
             if winner == self.id and self.current_task is None:
+                if self._on_cooldown(tid, tick):
+                    # We handed this task back after stalling on it; let another
+                    # robot own the retry instead of walking straight back in.
+                    continue
                 self._claim(tid, tick)
 
     def _ensure_bid(self, kt: KnownTask, tick: int) -> None:
@@ -541,17 +621,45 @@ class Robot:
         self.task_urgency = kt.urgency
         self.phase = "TO_PICK"
         self.goal = kt.pick
-        self._send(
-            {
-                "type": MSG_CLAIM,
-                "task_id": tid,
-                "pick": list(kt.pick),
-                "drop": list(kt.drop),
-                "urgency": kt.urgency,
-            },
-            tick,
-        )
+        auc = self.auctions.get(tid)
+        self.claim_cost = float(auc.bids[self.id][0]) if auc and self.id in auc.bids else 1e9
+        self.stall_episodes = 0
+        self.stall_task = tid
+        self._send_claim(tid, tick)
         self._event(tick, "claim", tid)
+
+    def _on_cooldown(self, tid: str, tick: int) -> bool:
+        """True while a handed-back task is off limits to this robot (RC5)."""
+        until = self.task_cooldown.get(tid)
+        if until is None:
+            return False
+        if tick < until:
+            return True
+        self.task_cooldown.pop(tid, None)
+        return False
+
+    def _send_claim(self, tid: str, tick: int, reassert: bool = False) -> None:
+        """Broadcast a claim, or repeat one we already hold (RC4a).
+
+        `cost` ships with the claim so a contested claim can be decided by the
+        two robots themselves, from their own bid arithmetic.
+        """
+        kt = self.known_tasks.get(tid)
+        if kt is None:
+            return
+        msg: dict[str, Any] = {
+            "type": MSG_CLAIM,
+            "task_id": tid,
+            "pick": list(kt.pick),
+            "drop": list(kt.drop),
+            "urgency": kt.urgency,
+            "cost": float(self.claim_cost),
+        }
+        if reassert:
+            self.claim_reasserts += 1
+            msg["reassert"] = True
+        self._send(msg, tick)
+        self.claim_sent_tick = tick
 
     def _release(self, reason: str, tick: int) -> None:
         tid = self.current_task
@@ -582,6 +690,131 @@ class Robot:
         if kt:
             self.auctions[tid] = Auction(tid, tick)
 
+    # ----- claim liveness (RC4b) ----------------------------------------
+
+    def _touch_claims_held_by(self, sender: str, tick: int) -> None:
+        """Any message from a holder proves the holder is still out there."""
+        for tid, kt in self.known_tasks.items():
+            if kt.holder == sender:
+                self.claim_heard[tid] = tick
+
+    def _check_claims(self, tick: int) -> None:
+        """Drop a claim that its own holder contradicts.
+
+        A claim is one shot and has no lease, so a lost packet forges a phantom
+        holder: every robot sees the task as taken, nobody bids, and it never
+        runs. Expiry only uses evidence already in hand -- our own task slot, or
+        the holder's own broadcasts. Tasks we have seen completed are immune.
+        """
+        if not self.flags.claim_expiry:
+            return
+        for tid, kt in list(self.known_tasks.items()):
+            if kt.status != "CLAIMED" or not kt.holder or tid in self.done_seen:
+                continue
+            holder = kt.holder
+            if holder == self.id:
+                if self.current_task == tid:
+                    self.claim_grace.pop(tid, None)
+                    continue
+                # Our own state disproves our own claim (we were preempted).
+                self.claim_stale += 1
+                self._expire_claim(tid, tick, "self-contradiction")
+                continue
+            peer = self.peers.get(holder)
+            if peer is not None:
+                self.claim_heard[tid] = tick
+                if peer.current_task == tid:
+                    self.claim_grace.pop(tid, None)
+                    continue
+                first = self.claim_grace.setdefault(tid, tick)
+                if tick - first >= CLAIM_GRACE_TICKS:
+                    self.claim_stale += 1
+                    self._expire_claim(tid, tick, f"{holder} no longer holds it")
+                continue
+            if tick - self.claim_heard.get(tid, tick) >= CLAIM_SILENT_TICKS:
+                self.claim_silent += 1
+                self._expire_claim(tid, tick, f"{holder} silent")
+
+    def _expire_claim(self, tid: str, tick: int, reason: str) -> None:
+        kt = self.known_tasks.get(tid)
+        if kt is None:
+            return
+        kt.holder = None
+        kt.status = "OPEN"
+        self.claim_grace.pop(tid, None)
+        self.claim_heard.pop(tid, None)
+        self.auctions[tid] = Auction(tid, tick)
+        self._event(tick, "claim_expired", f"{tid}: {reason}")
+
+    # ----- stall watch (RC3) --------------------------------------------
+
+    def _check_stall(self, tick: int) -> None:
+        """Fleet-liveness check that does not depend on the conflict detector.
+
+        Under UBPA a robot parked behind a peer's occupied cell for hundreds of
+        ticks produced zero deadlock events, because that path never entered the
+        stop_wait branch. Here the trigger is zero movement while holding
+        unfinished work, whatever the cause, and the robot must then do something
+        different instead of waiting forever.
+        """
+        if self.policy == "stop_wait" or not self.flags.stall_detector:
+            return
+        if self.current_task is None or self.phase in ("CHARGING", "PICKING", "DROPPING"):
+            return
+        if self.stalled_ticks < STALL_WINDOW:
+            return
+        self.stalled_ticks = 0
+        self.deadlock_events += 1
+        if self._note_stall_episode(tick):
+            return
+        blocker = None
+        nxt: Pos | None = None
+        if len(self.planned_path) > 1:
+            nxt = tuple(self.planned_path[1])
+            for rid, peer in self.peers.items():
+                if tuple(peer.position) == nxt:
+                    blocker = rid
+                    break
+        if blocker is not None and nxt is not None and self.id > blocker:
+            their = self.peers[blocker].ubpa_score
+            self._begin_yield(blocker, nxt, self.last_ubpa, float(their or 0.0), tick)
+            self.stall_recoveries += 1
+            self._event(tick, "stall_yield", f"blocked by {blocker} at {nxt}")
+            return
+        # Nobody is sitting on the next cell, so the plan itself is stale.
+        self.planned_path = [self.pos]
+        self.stall_recoveries += 1
+        self.unreachable_ticks += 1
+        self._event(tick, "stall_replan", f"{self.current_task} path stalled")
+        if self.unreachable_ticks >= UNREACHABLE_TICKS:
+            self._release("stalled", tick)
+
+    def _note_stall_episode(self, tick: int) -> bool:
+        """Count consecutive stalls on the current task; hand it back at the cap.
+
+        Returns True when the task was released, so the caller stops acting on a
+        task slot the robot no longer owns.
+        """
+        if not self.flags.stall_handoff or self.current_task is None:
+            return False
+        tid = self.current_task
+        if tid != self.stall_task:
+            self.stall_task, self.stall_episodes = tid, 0
+        self.stall_episodes += 1
+        if self.stall_episodes < STALL_HANDOFF_EPISODES:
+            return False
+        self.stall_handoffs += 1
+        self.stall_episodes = 0
+        self.stall_task = None
+        self.task_cooldown[tid] = tick + STALL_COOLDOWN_TICKS
+        self._event(
+            tick,
+            "stall_handoff",
+            f"{tid} handed back after {STALL_HANDOFF_EPISODES} stalls",
+        )
+        self._release("stalled", tick)
+        return True
+
     # ----- planning / conflict -----------------------------------------
 
     def _blocked(self) -> set[Pos]:
@@ -602,7 +835,12 @@ class Robot:
                 self.pos, goal, blocked, self.world.width, self.world.height
             )
         else:
-            vres, eres = reservations_from_peers(self.peers, tick, HOLD_HORIZON)
+            vres, eres = reservations_from_peers(
+                self.peers,
+                tick,
+                HOLD_HORIZON,
+                age_corrected=self.flags.age_corrected_peers,
+            )
             # do not reserve our own cell at t=now
             vres.discard((self.pos[0], self.pos[1], tick))
             path = spacetime_astar(

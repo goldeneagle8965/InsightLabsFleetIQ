@@ -84,10 +84,17 @@ def reservations_from_peers(
     peers: dict[str, object],
     now: int,
     hold: int = HOLD_HORIZON,
+    age_corrected: bool = True,
 ) -> tuple[set[tuple[int, int, int]], set[tuple[int, int, int, int, int]]]:
     """Vertex (x,y,t) and edge (x1,y1,x2,y2,t) reservations from peer paths.
 
     `peers` values expose `.planned_path` (list of positions, index 0 = now).
+
+    A peer's `planned_path[0]` is its cell when the packet was *sent*, not when
+    we received it. Age-correcting advances the series by the message age so we
+    reserve the ticks of floor the peer will actually occupy. Without it, a
+    3-tick radio delay makes every receiver plan into tiles the sender has
+    already left (or not yet reached).
     """
     vertex: set[tuple[int, int, int]] = set()
     edge: set[tuple[int, int, int, int, int]] = set()
@@ -98,6 +105,10 @@ def reservations_from_peers(
             if pos is not None:
                 path = [tuple(pos)]
         path = [tuple(p) for p in path]
+        if age_corrected:
+            age = max(0, now - int(getattr(peer, "timestamp", now)))
+            if age:
+                path = path[age:] if age < len(path) else [path[-1]]
         last = path[-1]
         span = len(path) + hold
         series: list[Pos] = []

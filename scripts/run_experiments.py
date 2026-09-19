@@ -52,6 +52,8 @@ def mean_run(rows: list[RunMetrics], policy: str, experiment: str) -> RunMetrics
     return RunMetrics(
         collision_count=int(round(avg("collision_count"))),
         deadlock_count=int(round(avg("deadlock_count"))),
+        stall_count=int(round(avg("stall_count"))),
+        stall_handoff_count=int(round(avg("stall_handoff_count"))),
         all_tasks_complete_tick=complete_tick,
         mean_wait_ticks=avg("mean_wait_ticks"),
         total_distance=avg("total_distance"),
@@ -104,6 +106,8 @@ def _print_table(payload: dict) -> None:
     keys = (
         "collision_count",
         "deadlock_count",
+        "stall_count",
+        "stall_handoff_count",
         "all_tasks_complete_tick",
         "mean_wait_ticks",
         "total_distance",

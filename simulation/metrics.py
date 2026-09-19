@@ -9,6 +9,8 @@ from typing import Any
 METRIC_KEYS = (
     "collision_count",
     "deadlock_count",
+    "stall_count",
+    "stall_handoff_count",
     "all_tasks_complete_tick",
     "mean_wait_ticks",
     "total_distance",
@@ -24,6 +26,14 @@ METRIC_KEYS = (
 class RunMetrics:
     collision_count: int = 0
     deadlock_count: int = 0
+    # Fleet-wide stall episodes: zero task completions and zero robot movement
+    # for STALL_WINDOW ticks while work is still outstanding. Measured for both
+    # policies; before this field, UBPA liveness was simply unobserved.
+    stall_count: int = 0
+    # Tasks a holder gave back after repeatedly stalling on them (RC5). This is
+    # the count that separates "the fleet retried the work elsewhere" from
+    # "the work was abandoned".
+    stall_handoff_count: int = 0
     all_tasks_complete_tick: int | None = None
     mean_wait_ticks: float = 0.0
     total_distance: float = 0.0
@@ -63,6 +73,8 @@ def summarize_pair(baseline: RunMetrics, ours: RunMetrics) -> dict[str, Any]:
     keys = (
         "collision_count",
         "deadlock_count",
+        "stall_count",
+        "stall_handoff_count",
         "all_tasks_complete_tick",
         "mean_wait_ticks",
         "total_distance",

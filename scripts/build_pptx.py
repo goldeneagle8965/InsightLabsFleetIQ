@@ -1,4 +1,9 @@
-"""Build the 12-slide SIH26123 deck. Numbers come from results/metrics.json, not invented %."""
+"""Build the 12-slide SIH26123 deck.
+
+Numbers are read from results/metrics.json, results/degradation.json and the two
+probe JSONs at build time; nothing is hand-typed and no improvement % is invented
+(the stop-and-wait baseline never finishes, so comparable=false).
+"""
 from __future__ import annotations
 
 import json
@@ -15,17 +20,43 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "SIH26123_EdgeFleet_FULL-12slide-Detail.pptx"
 METRICS = ROOT / "results" / "metrics.json"
 DEGRADATION = ROOT / "results" / "degradation.json"
+SCALE_PROBE = ROOT / "results" / "probe_26123_scale_delay.json"
+ABLATION_PROBE = ROOT / "results" / "probe_26123_ablation.json"
+
+
+def _json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def deg_summary(name):
     """One degradation scenario summary from results/degradation.json. Never hand-typed."""
-    data = json.loads(DEGRADATION.read_text(encoding="utf-8"))
-    return data["experiments"][name]["summary"]
+    return _json(DEGRADATION)["experiments"][name]["summary"]
 
 
+def probe_summary(fleet_key, policy="ubpa"):
+    """Fleet-size probe summary from results/probe_26123_scale_delay.json. Never hand-typed."""
+    return _json(SCALE_PROBE)["a_fleet_size"][fleet_key]["policy"][policy]["summary"]
+
+
+def ablation_summary(scenario, variant):
+    """Leave-one-out attribution summary from results/probe_26123_ablation.json."""
+    return _json(ABLATION_PROBE)["scenarios"][scenario][variant]["summary"]
+
+
+D_CLEAN = deg_summary("clean")
 D_LOSS40 = deg_summary("loss40")
 D_DELAY3 = deg_summary("delay3")
 D_LOSS70 = deg_summary("loss70")
+
+S6 = probe_summary("scale_6robots_12tasks")
+S8 = probe_summary("scale_8robots_16tasks")
+S8_BASE = probe_summary("scale_8robots_16tasks", "stop_wait")
+S10 = probe_summary("scale_10robots_20tasks")
+A8_NORC5 = ablation_summary("scale8", "no_rc5_stall_handoff")
+A_D3_ALLOFF = ablation_summary("delay3", "all_off")
+A_D3_NORC2 = ablation_summary("delay3", "no_rc2_age_corrected")
+A_L70_ALLOFF = ablation_summary("loss70", "all_off")
+CLEAN_TICKS = int(D_CLEAN["complete_tick_mean"])
 
 BG = RGBColor(0x1B, 0x17, 0x12)
 INK = RGBColor(0xF3, 0xE6, 0xD4)
@@ -305,7 +336,7 @@ def slide_india(prs):
         ("Radio reality", f"Indoor 5G/Wi-Fi is lossy: at 40% packet loss the same "
                           f"{D_LOSS40['tasks_done_min']}/{D_LOSS40['tasks_total']} still "
                           f"finish, just later ({D_LOSS40['complete_tick_min']}\u2013"
-                          f"{D_LOSS40['complete_tick_max']} ticks vs 72 clean) with "
+                          f"{D_LOSS40['complete_tick_max']} ticks vs {CLEAN_TICKS} clean) with "
                           f"{int(D_LOSS40['deadlock_count_mean'])} deadlocks. Sliders are live."),
         ("Why here", "Indian 3PLs buy AMRs faster than they buy a second control room. Edge negotiation is the cheap resilience."),
     ]
@@ -334,6 +365,22 @@ def result_cell(run):
     )
 
 
+def probe_cell(summary):
+    """Same two-column format, for probe summaries (means over seeds)."""
+    if summary["finished_runs"]:
+        return (
+            f"{int(summary['complete_tick_mean'])} ticks · "
+            f"{summary['tasks_done_max']}/{summary['tasks_total']} · "
+            f"{int(summary['collision_count_mean'])} conflicts · "
+            f"{int(summary['stall_handoff_count_mean'])} handoffs"
+        )
+    return (
+        f"incomplete · {summary['tasks_done_max']}/{summary['tasks_total']} jobs · "
+        f"{int(summary['deadlock_count_mean'])} deadlocks · "
+        f"{int(summary['stall_count_mean'])} stalls"
+    )
+
+
 def result_rows():
     """Read the measured table straight from results/metrics.json (aggregate over seeds)."""
     labels = [
@@ -341,11 +388,17 @@ def result_rows():
         ("E2", "E2 head-on aisle"),
         ("E3", "E3 aisle blocked t=16"),
     ]
-    data = json.loads(METRICS.read_text(encoding="utf-8"))
+    data = _json(METRICS)
     rows = []
     for key, label in labels:
         summary = data["experiments"][key]["summary"]
         rows.append([label, result_cell(summary["baseline"]), result_cell(summary["ubpa"])])
+    # fourth row: 8-robot scale case, read from the scale probe, not typed
+    rows.append([
+        f"{S8['tasks_total'] // 2} robots · {S8['tasks_total']} tasks",
+        probe_cell(S8_BASE),
+        probe_cell(S8),
+    ])
     return rows, int(data["tick_limit"])
 
 
@@ -361,8 +414,8 @@ def slide_results(prs):
     rows, tick_limit = result_rows()
     col_w = [Inches(3.3), Inches(4.45), Inches(4.45)]
     x0 = Inches(0.55)
-    y0 = Inches(1.7)
-    row_h = Inches(0.85)
+    y0 = Inches(1.62)
+    row_h = Inches(0.62)
     # header
     x = x0
     for i, h in enumerate(headers):
@@ -376,25 +429,59 @@ def slide_results(prs):
         bg = PANEL if r % 2 == 0 else RGBColor(0x2C, 0x24, 0x1C)
         for i, cell in enumerate(row):
             add_rect(s, x, y, col_w[i], row_h, bg)
-            tf = textbox(s, x + Inches(0.12), y + Inches(0.22), col_w[i] - Inches(0.2), Inches(0.5))
+            tf = textbox(s, x + Inches(0.12), y + Inches(0.14), col_w[i] - Inches(0.2), Inches(0.5))
             color = TEAL if i == 2 else (DANGER if i == 1 else INK)
-            para(tf, cell, size=14, bold=(i != 0), color=color, first=True)
+            para(tf, cell, size=13, bold=(i != 0), color=color, first=True)
             x += col_w[i]
 
-    tf = textbox(s, Inches(0.55), Inches(5.15), Inches(12.2), Inches(1.7))
-    para(tf, "How to read this", size=16, bold=True, color=AMBER, first=True, space=6)
+    tf = textbox(s, Inches(0.55), Inches(4.74), Inches(12.2), Inches(2.6))
+    para(tf, "How to read this", size=15, bold=True, color=AMBER, first=True, space=4)
     para(
         tf,
         "Stop-and-wait freezes on mutual occupancy, so distance is low and wait ≈ 1. UBPA travels farther because it finishes the jobs. "
-        f"Tick limit {tick_limit}. comparable=false, so improvement % is n/a.",
-        size=16,
+        f"Tick limit {tick_limit}. comparable=false, so improvement % is n/a. Clean run finishes at {CLEAN_TICKS} ticks.",
+        size=15,
         color=INK,
+    )
+    para(
+        tf,
+        f"Scale (probe, not headline): {S8['tasks_total'] // 2} robots / {S8['tasks_total']} tasks finish on "
+        f"{S8['finished_runs']}/{S8['runs']} seeds at {int(S8['complete_tick_mean'])} ticks, {int(S8['collision_count_mean'])} conflicts, "
+        f"{int(S8['stall_handoff_count_mean'])} stall handoffs. Stop-and-wait finishes {S8_BASE['finished_runs']}/{S8_BASE['runs']}. "
+        f"{S6['tasks_total'] // 2} robots / {S6['tasks_total']} tasks finish {S6['finished_runs']}/{S6['runs']} at {int(S6['complete_tick_mean'])} ticks; "
+        f"{S10['tasks_total'] // 2} robots / {S10['tasks_total']} tasks finish {S10['finished_runs']}/{S10['runs']} at {int(S10['complete_tick_mean'])} ticks.",
+        size=13,
+        color=MUTED,
+    )
+    para(
+        tf,
+        f"Attribution: the 5 fixes RC1-RC5 were each switched off. All off, 3-tick radio delay finishes "
+        f"{A_D3_ALLOFF['finished_runs']}/{A_D3_ALLOFF['runs']} runs ({int(A_D3_ALLOFF['collision_count_mean'])} intention conflicts); "
+        f"all off, 70% loss drops {int(A_L70_ALLOFF['packets_dropped_mean'])} packets/run; RC5 off alone leaves the 8-robot run at "
+        f"{A8_NORC5['tasks_done_max']}/{A8_NORC5['tasks_total']} tasks with {int(A8_NORC5['deadlock_count_mean'])} deadlocks and no finish.",
+        size=13,
+        color=MUTED,
+    )
+    para(
+        tf,
+        f"Published trade-off: with age-corrected peer reservations off (RC2) the 3-tick delay case still finishes but "
+        f"at {int(A_D3_NORC2['complete_tick_mean'])} ticks with {int(A_D3_NORC2['collision_count_mean'])} intention conflicts, "
+        f"against {D_DELAY3['complete_tick_min']} ticks and {int(D_DELAY3['collision_count_mean'])} conflicts shipped. "
+        f"We pay {D_DELAY3['complete_tick_min'] - int(A_D3_NORC2['complete_tick_mean'])} ticks to remove those conflicts.",
+        size=13,
+        color=MUTED,
     )
     finish_ticks = " / ".join(row[2].split(" ")[0] for row in rows if "ticks" in row[2])
     notes(
         s,
         f"Memorize: {finish_ticks}. Baseline deadlocks. Ours finishes. "
-        "If they push for a percentage, repeat: a percentage against an incomplete baseline is a lie.",
+        "If they push for a percentage, repeat: a percentage against an incomplete baseline is a lie. "
+        f"Source: {METRICS.name} for the first three rows, {SCALE_PROBE.name} for the 8-robot row, "
+        f"{ABLATION_PROBE.name} for the RC1-RC5 attribution. "
+        f"Robustness: 40% loss finishes {D_LOSS40['complete_tick_min']}-{D_LOSS40['complete_tick_max']} ticks, "
+        f"3-tick delay finishes {D_DELAY3['complete_tick_min']} ticks with {int(D_DELAY3['collision_count_mean'])} conflicts, "
+        f"70% loss finishes {D_LOSS70['complete_tick_min']}-{D_LOSS70['complete_tick_max']} ticks. "
+        "8 robots is our measured ceiling; we do not claim 40-robot scale.",
     )
 
 
@@ -412,7 +499,7 @@ def slide_demo(prs):
         ("2:10", f"Drag packet-loss to 40%: same {D_LOSS40['tasks_done_min']}/"
                  f"{D_LOSS40['tasks_total']} finish, later "
                  f"({D_LOSS40['complete_tick_min']}\u2013{D_LOSS40['complete_tick_max']} "
-                 f"vs 72), {int(D_LOSS40['deadlock_count_mean'])} deadlocks."),
+                 f"vs {CLEAN_TICKS}), {int(D_LOSS40['deadlock_count_mean'])} deadlocks."),
         ("2:25", "Flip policy to stop-and-wait. Same map. They stall. That is the usefulness."),
     ]
     for i, (t, body) in enumerate(beats):
@@ -428,10 +515,13 @@ def slide_demo(prs):
         "Practice twice with a timer. Have a 20-second backup screen recording if the judging laptop has no Python. Live first. Recording is insurance. "
         f"Radio honesty if asked: 40% loss still completes {D_LOSS40['tasks_done_min']}/{D_LOSS40['tasks_total']} in "
         f"{D_LOSS40['complete_tick_min']}-{D_LOSS40['complete_tick_max']} ticks with 0 deadlocks; "
-        f"3 ticks of delay still never deadlocks but starves E1 to {D_DELAY3['tasks_done_min']}/{D_DELAY3['tasks_total']} "
-        f"with {int(D_DELAY3['collision_count_mean'])} intention conflicts; "
-        f"70% loss lands only {D_LOSS70['tasks_done_min']}-{D_LOSS70['tasks_done_max']}/{D_LOSS70['tasks_total']}. "
-        "All of that is results/degradation.json, measured, not typed.",
+        f"3 ticks of delay still completes {D_DELAY3['tasks_done_min']}/{D_DELAY3['tasks_total']} at "
+        f"{D_DELAY3['complete_tick_min']} ticks with {int(D_DELAY3['collision_count_mean'])} intention conflicts; "
+        f"70% loss still completes {D_LOSS70['tasks_done_min']}/{D_LOSS70['tasks_total']} in "
+        f"{D_LOSS70['complete_tick_min']}-{D_LOSS70['complete_tick_max']} ticks with {D_LOSS70['deadlock_count_mean']} deadlocks. "
+        f"And {S8['tasks_total'] // 2} robots / {S8['tasks_total']} tasks finish {S8['finished_runs']}/{S8['runs']} seeds at "
+        f"{int(S8['complete_tick_mean'])} ticks. "
+        "All of that is results/degradation.json and results/probe_26123_scale_delay.json, measured, not typed.",
     )
 
 
@@ -506,7 +596,10 @@ def main() -> None:
     prs.save(str(OUT))
     print(f"wrote {OUT}")
     rows, tick_limit = result_rows()
-    print(f"slide 9 numbers read from {METRICS.name} (tick limit {tick_limit}):")
+    print(
+        f"slide 9 numbers: rows 1-3 from {METRICS.name}, row 4 from {SCALE_PROBE.name} "
+        f"(tick limit {tick_limit}):"
+    )
     for label, base, ours in rows:
         print(f"  {label:<22} baseline: {base}")
         print(f"  {'':<22} UBPA:     {ours}")
