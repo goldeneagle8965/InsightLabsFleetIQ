@@ -12,9 +12,31 @@ cd sih26123-edge-fleet
 python scripts/run_demo.py
 ```
 
-Open the URL it prints (default <http://127.0.0.1:8765/>). That terminal *is* the simulation clock — 8 ticks/second. Leave it running and drive everything from the browser. `Ctrl+C` stops it.
+On Windows, **double-click `RUN_DEMO.bat`** in the repo folder instead — it changes into the right directory for you and starts the same command.
+
+Your browser opens on the URL it prints (default <http://127.0.0.1:8765/>). That terminal *is* the simulation clock — 8 ticks/second. Leave it running and drive everything from the browser. `Ctrl+C` stops it.
 
 No git? Use **Code → Download ZIP** on the repository page. The demo needs nothing but Python.
+
+If you ever see a stale page, or the server prints a different port than you expected, that is the automatic port fallback working: a previous run is still holding 8765, so this run moved to the next free port. `Ctrl+C` the old terminal (or just use the new URL) — the script never double-binds a busy port.
+
+**Running it from the wrong folder** is the usual reason nothing happens. `python scripts/run_demo.py` is a relative path, so your shell has to already be in the repo root. Symptom and fix:
+
+```text
+can't open file '...\scripts\run_demo.py': [Errno 2] No such file or directory   <- wrong folder
+```
+
+```bash
+# Windows PowerShell / cmd
+cd "C:\path\to\sih26123"
+python scripts\run_demo.py
+```
+
+```bash
+# macOS / Linux
+cd /path/to/sih26123
+python3 scripts/run_demo.py
+```
 
 ## The 60-second walkthrough
 
@@ -38,9 +60,12 @@ Useful options:
 
 ```bash
 python scripts/run_demo.py --policy stop_wait   # start in the baseline instead
-python scripts/run_demo.py --port 9000          # port already in use
+python scripts/run_demo.py --port 9000          # force a specific port
+python scripts/run_demo.py --no-browser         # do not open a browser tab
 python scripts/run_demo.py --seed 7 --robots 4  # different layout draw
 ```
+
+`--host`, `--port`, `--policy`, `--seed`, `--robots`, `--no-browser` are the full set. Any free working directory is fine: the script resolves the repo root, `frontend/static/`, and `results/metrics.json` from its own file path, not from your current folder.
 
 ## Measure it yourself (about 4 seconds)
 
