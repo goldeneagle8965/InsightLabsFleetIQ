@@ -1,4 +1,9 @@
-"""Measure UBPA against stop-and-wait. Writes results/metrics.json."""
+"""Measure UBPA against stop-and-wait. Writes results/metrics.json.
+
+Pass ``--out <path>`` to write somewhere else. The dashboard's "re-measure on
+this machine" button uses that so a fresh run can be compared against the
+shipped numbers instead of overwriting the artifact the deck cites.
+"""
 
 from __future__ import annotations
 
@@ -83,7 +88,22 @@ def pair_experiment(name: str, seeds: tuple[int, ...], **kwargs) -> dict:
     }
 
 
-def main() -> None:
+def _parse_out(argv: list[str]) -> Path:
+    """Destination for the metrics payload; defaults to the shipped artifact."""
+    out = RESULTS / "metrics.json"
+    if "--out" in argv:
+        index = argv.index("--out")
+        if index + 1 >= len(argv):
+            raise SystemExit("--out needs a path")
+        out = Path(argv[index + 1]).expanduser()
+        if not out.is_absolute():
+            out = ROOT / out
+    return out
+
+
+def main(argv: list[str] | None = None) -> None:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out = _parse_out(argv)
     RESULTS.mkdir(parents=True, exist_ok=True)
     print("E1 throughput (3 robots, 6 tasks, 5 seeds)...")
     e1 = pair_experiment("E1", SEEDS)
@@ -96,7 +116,7 @@ def main() -> None:
         "experiments": {"E1": e1, "E2": e2, "E3": e3},
         "note": "Improvement is (baseline-ours)/baseline only when both policies finished.",
     }
-    out = RESULTS / "metrics.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(f"wrote {out}")
     _print_table(payload)

@@ -1,0 +1,15 @@
+# One-click public demo URL (free instance).
+# Render injects $PORT; scripts/run_web.py already reads it.
+services:
+  - type: web
+    name: sih26123-edge-fleet
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: MAX_SESSIONS
+        value: "24"
+      - key: SESSION_TTL_S
+        value: "1800"

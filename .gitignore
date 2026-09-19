@@ -19,3 +19,5 @@ scripts/_gh_device_login.py
 .gh_login/
 gh_login_out.txt
 *.zip
+results/remeasure_metrics.json
+*.pptx

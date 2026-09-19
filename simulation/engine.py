@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import random
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -15,6 +16,7 @@ from simulation.config import (
     TICK_HZ,
     CoordinationFlags,
 )
+from simulation.maps import get_map, map_keys
 from simulation.metrics import RunMetrics
 from simulation.peer import MSG_TASK_ANNOUNCE, PeerBus
 from simulation.robot import Robot
@@ -34,6 +36,12 @@ class FleetSim:
     max_ticks: int = MAX_TICKS_DEMO
     tasks: list[Task] | None = None
     spawn: list[tuple[int, int]] | None = None
+    # Selectable floor plan (see simulation/maps.py). "warehouse" reproduces the
+    # measured benchmark layout byte for byte, so results/ stays comparable.
+    env: str = "warehouse"
+    # Wall-clock speed multiplier, honoured by the runner loop, not by the sim:
+    # the tick size never changes, only how fast ticks are consumed.
+    speed: float = 1.0
     announce_at: int = 4
     forced_block: tuple[int, int] | None = None
     forced_block_tick: int | None = None
@@ -53,13 +61,21 @@ class FleetSim:
     _done_mark: int = 0
     _stall_marked: bool = False
     _stall_episodes: int = 0
+    # Sequence for operator-posted jobs, so their ids never collide with the
+    # announced T1..Tn set.
+    _job_seq: int = 0
 
     def __post_init__(self) -> None:
         self.reset()
 
     def reset(self) -> None:
         self._rng = random.Random(self.seed)
-        self.world = hyderabad_layout()
+        if self.env in map_keys():
+            spec = get_map(self.env)
+            self.world = spec.build()
+        else:
+            spec = None
+            self.world = hyderabad_layout()
         self.bus = PeerBus(delay=self.radio_delay, drop_prob=self.drop_prob, rng=random.Random(self.seed + 17))
         self.tick = 0
         self.paused = False
@@ -70,9 +86,20 @@ class FleetSim:
         self._done_mark = 0
         self._stall_marked = False
         self._stall_episodes = 0
-        jobs = self.tasks if self.tasks is not None else default_tasks()
+        self._job_seq = 0
+        if self.tasks is not None:
+            jobs = self.tasks
+        elif spec is not None:
+            jobs = spec.tasks()
+        else:
+            jobs = default_tasks()
         self.world.tasks = {t.task_id: copy.copy(t) for t in jobs}
-        spawns = self.spawn if self.spawn is not None else spawn_positions()
+        if self.spawn is not None:
+            spawns = self.spawn
+        elif spec is not None:
+            spawns = spec.spawn()
+        else:
+            spawns = spawn_positions()
         self.robots = []
         for i in range(self.n_robots):
             rid = f"R{i + 1}"
@@ -174,6 +201,180 @@ class FleetSim:
         )
         return cell
 
+    # ----- operator controls -------------------------------------------
+
+    def set_env(self, env: str) -> str:
+        """Switch floor plan. Rebuilds at tick 0; robots still auction the work."""
+        if env in map_keys():
+            self.env = env
+        self.reset()
+        self.events.append(
+            {"tick": self.tick, "robot": "OP", "kind": "env", "detail": get_map(self.env).label}
+        )
+        return self.env
+
+    def set_robots(self, n: int) -> int:
+        """Fleet size, clamped to the 3..8 range the layout supports."""
+        self.n_robots = max(3, min(8, int(n)))
+        self.reset()
+        self.events.append(
+            {"tick": self.tick, "robot": "OP", "kind": "robots", "detail": f"{self.n_robots} robots"}
+        )
+        return self.n_robots
+
+    def add_task(
+        self, pick: tuple[int, int], drop: tuple[int, int], urgency: float = 0.6
+    ) -> Task:
+        """Post a job to the floor.
+
+        This is the WMS half of the problem statement, not the coordinator half:
+        the job is *broadcast* as a bulletin on the same radio the robots already
+        use. No robot is named, no robot is told to take it. Whoever bids lowest
+        wins it through the ordinary auction.
+        """
+        self._job_seq += 1
+        tid = f"J{self._job_seq}"
+        task = Task(
+            task_id=tid,
+            pick=(int(pick[0]), int(pick[1])),
+            drop=(int(drop[0]), int(drop[1])),
+            urgency=max(0.0, min(1.0, float(urgency))),
+        )
+        self.post_task(task)
+        self.events.append(
+            {
+                "tick": self.tick,
+                "robot": "WMS",
+                "kind": "job",
+                "detail": f"{tid} posted pick {task.pick} -> drop {task.drop}",
+            }
+        )
+        return task
+
+    def post_task(self, task: Task) -> Task:
+        """Put a job on the floor and broadcast it over the peer radio.
+
+        Shared by the operator's job board and the WMS bulletin so both travel
+        the identical route: a broadcast every robot may hear, never an
+        assignment to a named robot. The auction still decides who takes it.
+        """
+        task.status = "OPEN"
+        task.holder = None
+        task.complete_tick = None
+        task.announced_tick = self.tick
+        self.world.tasks[task.task_id] = task
+        self._broadcast_task(task)
+        return task
+
+    def remove_task(self, task_id: str) -> bool:
+        """Withdraw a posted job. A robot already carrying it finishes it."""
+        task = self.world.tasks.pop(task_id, None)
+        if task is None:
+            return False
+        self.events.append(
+            {"tick": self.tick, "robot": "WMS", "kind": "job", "detail": f"{task_id} withdrawn"}
+        )
+        return True
+
+    def drain_robot(self, robot_id: str, level: float = 15.0) -> float:
+        """Force one robot's battery down so it has to decide to charge itself.
+
+        The operator changes the world, not the plan: the robot notices its own
+        low battery on its next tick and drives to the charger on its own.
+        """
+        for bot in self.robots:
+            if bot.id == robot_id:
+                bot.battery = max(0.0, min(100.0, float(level)))
+                bot._event(self.tick, "battery", f"operator set {bot.battery:.0f}%")
+                return bot.battery
+        return -1.0
+
+    def forecast(self, limit: int | None = None) -> dict[str, Any]:
+        """Shadow-run a copy of the current state and report when it finishes.
+
+        The clone keeps the seed, the RNG position, the radio bus and every
+        blocked cell, so the answer is deterministic for the same question. The
+        live sim is never stepped here -- it is a forecast of *this* fleet from
+        *this* moment, which is why an obstacle changes the number.
+        """
+        clone = copy.deepcopy(self)
+        clone.paused = False
+        clone.events = []
+        for bot in clone.robots:
+            bot.events = []
+        cap = int(limit) if limit else self.max_ticks
+        t0 = time.perf_counter()
+        while clone.tick < cap and not clone.all_done():
+            clone.step()
+        compute_ms = (time.perf_counter() - t0) * 1000.0
+        m = clone.metrics()
+        finish = m.all_tasks_complete_tick
+        eta_ticks = None if finish is None else finish - self.tick
+        return {
+            "from_tick": self.tick,
+            "horizon_ticks": cap,
+            "finish_tick": finish,
+            "eta_ticks": eta_ticks,
+            "eta_seconds": (
+                None
+                if eta_ticks is None
+                else round(eta_ticks / (TICK_HZ * max(0.1, self.speed)), 1)
+            ),
+            "finished": clone.all_done(),
+            "tasks_done": m.tasks_done,
+            "tasks_total": m.tasks_total,
+            "collisions": m.collision_count,
+            "deadlocks": m.deadlock_count,
+            "compute_ms": round(compute_ms, 1),
+        }
+
+    def _broadcast_task(self, task: Task) -> None:
+        self.bus.broadcast(
+            "WMS",
+            {
+                "type": MSG_TASK_ANNOUNCE,
+                "task_id": task.task_id,
+                "pick": list(task.pick),
+                "drop": list(task.drop),
+                "urgency": task.urgency,
+            },
+            self.tick,
+        )
+
+    def _auction_view(self, limit: int = 4) -> list[dict[str, Any]]:
+        """Read-only window onto the live auctions, for the dashboard.
+
+        This is evidence, not control: it shows the bids robots have actually
+        broadcast to each other. Nothing here can pick a winner.
+        """
+        out: list[dict[str, Any]] = []
+        for bot in self.robots:
+            for tid, auc in bot.auctions.items():
+                valid = sum(1 for _, ok in auc.bids.values() if ok)
+                if not auc.bids:
+                    continue
+                best_id, best = None, None
+                for rid, (cost, ok) in auc.bids.items():
+                    if not ok:
+                        continue
+                    if best is None or cost < best:
+                        best, best_id = cost, rid
+                out.append(
+                    {
+                        "task_id": tid,
+                        "viewer": bot.id,
+                        "opened_tick": auc.opened_tick,
+                        "closed": auc.closed,
+                        "bids": len(auc.bids),
+                        "valid_bids": valid,
+                        "best_bidder": best_id,
+                        "best_cost": None if best is None else round(best, 2),
+                    }
+                )
+            if len(out) >= limit:
+                break
+        return out[:limit]
+
     def snapshot(self) -> dict[str, Any]:
         robots = []
         for bot in self.robots:
@@ -193,12 +394,34 @@ class FleetSim:
                 }
             )
         m = self.metrics()
+        spec = get_map(self.env)
         return {
             "tick": self.tick,
             "hz": TICK_HZ,
             "policy": self.policy,
             "paused": self.paused,
             "complete": self.all_done(),
+            "speed": self.speed,
+            "n_robots": self.n_robots,
+            "env": self.env,
+            "map": {"key": spec.key, "label": spec.label, "blurb": spec.blurb},
+            "jobs": [
+                {
+                    "task_id": t.task_id,
+                    "pick": list(t.pick),
+                    "drop": list(t.drop),
+                    "urgency": t.urgency,
+                    "status": t.status,
+                    "holder": t.holder,
+                    "complete_tick": t.complete_tick,
+                }
+                for t in self.world.tasks.values()
+            ],
+            "auctions": self._auction_view(),
+            "charger": {
+                "cell": list(self.world.charger),
+                "charging": [b.id for b in self.robots if b.phase == "CHARGING"],
+            },
             "world": self.world.snapshot(),
             "robots": robots,
             "radio": self.bus.snapshot_log(36),
@@ -321,20 +544,8 @@ class FleetSim:
         self._last_announce_tick = self.tick
         self._last_progress_tick = self.tick
         for t in self.world.tasks.values():
-            t.announced_tick = self.tick
-            t.status = "OPEN"
-            t.holder = None
-            self.bus.broadcast(
-                "WMS",
-                {
-                    "type": MSG_TASK_ANNOUNCE,
-                    "task_id": t.task_id,
-                    "pick": list(t.pick),
-                    "drop": list(t.drop),
-                    "urgency": t.urgency,
-                },
-                self.tick,
-            )
+            # Same route as an operator-posted job: broadcast, never assignment.
+            self.post_task(t)
         self.events.append(
             {
                 "tick": self.tick,

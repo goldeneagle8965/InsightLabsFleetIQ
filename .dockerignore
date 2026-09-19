@@ -1,0 +1,19 @@
+# Keep the image to source only: no VCS, no caches, no machine-specific artifacts.
+.git/
+.github/
+.gh_login/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+.env
+.idea/
+.vscode/
+_tmp_*
+*.log
+results/remeasure_metrics.json
+*.pptx
+*.zip

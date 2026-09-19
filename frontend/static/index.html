@@ -3,75 +3,188 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SIH26123 — Edge fleet, Hyderabad 3PL floor</title>
+  <title>SIH26123 — Edge-AI Distributed Fleet Coordination</title>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <header class="top">
-    <div>
-      <p class="kicker">SIH26123 · Edge-AI Distributed Fleet Coordination</p>
-      <h1>No dispatcher. Three AMRs, one radio.</h1>
-    </div>
-    <div class="clock">
-      <span id="tick">t=0</span>
-      <span id="policy-label">UBPA</span>
-    </div>
-  </header>
+<div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <main>
-    <section class="floor">
-      <canvas id="grid" width="1000" height="440"></canvas>
-      <p class="hint">Click a cell to block/unblock it. That is a live obstacle, not a scripted clip.</p>
+<header class="topbar">
+  <div class="brand">
+    <p class="kicker">SIH26123 · Edge-AI Distributed Fleet Coordination</p>
+    <h1>No dispatcher. Each robot bids, senses and reroutes on its own.</h1>
+    <p class="sub" id="brand-sub">Peer-to-peer AMRs — every robot decides from what the other robots broadcast.</p>
+  </div>
+  <div class="chips">
+    <div class="chip"><span class="k">tick</span><b id="chip-tick">t=0</b></div>
+    <div class="chip"><span class="k">tick rate</span><b id="chip-hz">—</b></div>
+    <div class="chip"><span class="k">policy</span><b id="chip-policy">UBPA</b></div>
+    <div class="chip"><span class="k">fleet</span><b id="chip-fleet">3 robots</b></div>
+    <div class="chip"><span class="k">session</span><b id="chip-server">—</b></div>
+    <div class="chip status" id="chip-status"><span class="dot"></span><b>connecting…</b></div>
+  </div>
+</header>
+
+<div class="layout">
+  <main class="col-main">
+
+    <section class="card floor-card">
+      <div class="card-head">
+        <h2>Indoor floor — <span id="map-label">warehouse</span></h2>
+        <div class="tools">
+          <button id="btn-block" class="ghost" title="Block the busiest aisle (key: b)">Block aisle</button>
+          <button id="btn-clear" class="ghost" title="Remove every operator obstacle">Clear obstacles</button>
+          <button id="btn-pause" class="ghost" title="Pause / resume (key: space)">Pause</button>
+          <button id="btn-step" class="ghost" title="Advance exactly one tick (key: s)">Step 1 tick</button>
+          <button id="btn-reset" class="ghost" title="Reset this run (key: r)">Reset</button>
+        </div>
+      </div>
+      <p class="sub" id="map-blurb"></p>
+      <div class="canvas-wrap">
+        <canvas id="grid" width="1180" height="560"></canvas>
+        <div id="hover-tip" class="hover-tip"></div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <p class="sub">Click any free cell to drop or lift an obstacle — the fleet re-plans on the next tick, live. Hover a robot to read the state it holds locally.</p>
     </section>
 
-    <aside>
-      <div class="panel">
-        <h2>Operator</h2>
-        <div class="row">
-          <button id="btn-aisle" class="danger">Block aisle</button>
-          <button id="btn-pause">Pause</button>
-          <button id="btn-reset">Reset</button>
-        </div>
-        <div class="row">
-          <button id="btn-ubpa" class="on">Policy: UBPA</button>
-          <button id="btn-sw">Policy: stop-and-wait</button>
-        </div>
-        <div class="radio-knobs">
-          <label>Packet loss <b id="drop-label">0%</b>
-            <input id="drop-slider" type="range" min="0" max="80" step="5" value="0" />
-          </label>
-          <label>Radio delay <b id="delay-label">1 tick</b>
-            <input id="delay-slider" type="range" min="0" max="5" step="1" value="1" />
-          </label>
-          <p class="sub" id="radio-stats">delivered 0 · dropped 0</p>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Robots (local state)</h2>
-        <div id="robots"></div>
-      </div>
-
-      <div class="panel">
-        <h2>Radio (peer packets)</h2>
-        <p class="sub">Robot A knows Robot B from this feed, not from a scheduler.</p>
-        <div id="radio" class="log"></div>
-      </div>
-
-      <div class="panel">
+    <section class="card">
+      <div class="card-head">
         <h2>Live run meters</h2>
-        <p class="sub">This panel is the current simulation, not a slide.</p>
-        <div id="live-metrics" class="metrics"></div>
+        <span class="src">this run, measured not scripted</span>
       </div>
+      <div class="meter-grid" id="live-metrics"></div>
+      <div class="spark-row">
+        <figure><figcaption>jobs completed</figcaption><canvas class="spark" id="spark-tasks" width="240" height="56"></canvas></figure>
+        <figure><figcaption>collisions · deadlocks · stalls</figcaption><canvas class="spark" id="spark-bad" width="240" height="56"></canvas></figure>
+        <figure><figcaption>mean robot step (ms)</figcaption><canvas class="spark" id="spark-step" width="240" height="56"></canvas></figure>
+      </div>
+    </section>
 
-      <div class="panel">
-        <h2>Measured vs stop-and-wait</h2>
-        <p class="sub">Loaded from <code>results/metrics.json</code>. Baseline vs UBPA raw values; % only if both finished.</p>
-        <div id="measured" class="metrics"></div>
+    <section class="card shadow-card">
+      <div class="card-head">
+        <h2>Shadow twin — same seed, same map, the other policy</h2>
+        <span class="src" id="shadow-lag">—</span>
       </div>
-    </aside>
+      <p class="sub">A second fleet runs silently beside this one under stop-and-wait. Nothing is pasted in: both columns are read out of two live simulations.</p>
+      <div id="shadow-body" class="shadow-body"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Measured on this build — UBPA vs stop-and-wait</h2>
+        <span class="src" id="measured-src">results/metrics.json</span>
+      </div>
+      <div id="measured-body"></div>
+      <div class="remeasure-row">
+        <button id="btn-remeasure" class="primary">Re-measure on this machine</button>
+        <span class="sub" id="remeasure-status"></span>
+      </div>
+      <div id="remeasure-log" class="log small"></div>
+    </section>
+
   </main>
 
-  <script src="/static/app.js"></script>
+  <aside class="col-side">
+
+    <section class="card">
+      <div class="card-head"><h2>Operator console</h2></div>
+      <p class="field-label">Floor</p>
+      <div class="btn-row" id="env-buttons"></div>
+      <p class="field-label">Robots <span class="hint" id="robot-count-label">3</span></p>
+      <input id="robot-range" class="range" type="range" min="3" max="8" step="1" value="3" />
+      <div class="btn-row small" id="robot-buttons"></div>
+      <p class="field-label">Simulation speed <span class="hint" id="speed-label">1×</span></p>
+      <input id="speed-range" class="range" type="range" min="0.25" max="16" step="0.25" value="1" />
+      <div class="btn-row small" id="speed-buttons"></div>
+      <p class="field-label">Coordination policy</p>
+      <div class="btn-row" id="policy-buttons"></div>
+      <p class="field-label">Radio conditions</p>
+      <label class="slider">packet loss <b id="drop-label">0%</b>
+        <input id="drop-slider" type="range" min="0" max="80" step="5" value="0" />
+      </label>
+      <label class="slider">broadcast delay <b id="delay-label">1 tick</b>
+        <input id="delay-slider" type="range" min="0" max="5" step="1" value="1" />
+      </label>
+      <p class="sub" id="radio-stats">delivered 0 · dropped 0</p>
+      <p class="field-label">Finish estimate on this fleet</p>
+      <div class="btn-row">
+        <button id="btn-forecast" class="primary">Forecast ETA</button>
+      </div>
+      <div id="forecast-body" class="forecast"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Job board</h2>
+        <span class="src" id="job-count">—</span>
+      </div>
+      <div id="jobs"></div>
+      <details class="new-job">
+        <summary>Inject a job</summary>
+        <div class="grid2">
+          <label>pick x <input id="pick-x" type="number" min="0" step="1" /></label>
+          <label>pick y <input id="pick-y" type="number" min="0" step="1" /></label>
+          <label>drop x <input id="drop-x" type="number" min="0" step="1" /></label>
+          <label>drop y <input id="drop-y" type="number" min="0" step="1" /></label>
+          <label>urgency <input id="urgency" type="number" min="0" max="1" step="0.1" value="0.6" /></label>
+        </div>
+        <div class="btn-row small">
+          <button id="btn-pick-map" class="ghost">Set pick from map</button>
+          <button id="btn-drop-map" class="ghost">Set drop from map</button>
+          <button id="btn-add-task" class="primary">Add job</button>
+        </div>
+        <p class="sub" id="pick-hint">Tip: a job posted here is announced to every robot over the radio — there is no work queue to edit.</p>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Charging station</h2></div>
+      <div id="charger"></div>
+      <p class="field-label">Battery / forced low-charge drill</p>
+      <div id="batteries" class="batteries"></div>
+      <p class="sub">Draining a robot below the reserve makes it abandon the queue, drive to the charger and resume afterwards — all decided on the robot.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Being decided right now</h2></div>
+      <p class="sub">Live peer bids. Each row is a task one robot is brokering to the others — read-only evidence that the choice is made on the floor, not in a scheduler.</p>
+      <div id="auctions"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Radio — peer packets</h2></div>
+      <p class="sub">Robot A learns what Robot B is doing from this feed. This is the whole coordination channel.</p>
+      <div id="radio" class="log"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Event feed</h2></div>
+      <div id="events" class="log"></div>
+    </section>
+
+    <section class="card brief-card">
+      <div class="card-head"><h2>The pitch in 30 seconds</h2></div>
+      <ul class="brief">
+        <li><b>Problem.</b> Warehouse AMRs that need a central brain stall the whole floor when one robot, one Wi-Fi hop or one scheduler fails.</li>
+        <li><b>What we built.</b> Each robot keeps its own state, broadcasts bids and intents, and picks its next move from what it hears back.</li>
+        <li><b>How it holds up.</b> Packet loss, delay, blocked aisles and a single robot losing charge are all injected at runtime — the metrics come from the run.</li>
+        <li><b>Evidence.</b> Every number on this page is read out of the live simulation or out of <code>results/*.json</code>; press Re-measure to rebuild it here.</li>
+      </ul>
+      <p class="sub">Shortcuts: <kbd>space</kbd> pause · <kbd>s</kbd> step · <kbd>b</kbd> block aisle · <kbd>r</kbd> reset · <kbd>f</kbd> forecast</p>
+    </section>
+
+  </aside>
+</div>
+
+<div id="complete-banner" class="banner hidden"></div>
+<canvas id="confetti" class="confetti"></canvas>
+
+<footer>
+  <span id="footer-left">Edge fleet · deterministic seeds · metrics from runs</span>
+  <span id="footer-right"></span>
+</footer>
+
+<script src="/static/app.js"></script>
 </body>
 </html>

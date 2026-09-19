@@ -79,6 +79,7 @@ def main() -> None:
     url = f"http://{args.host}:{port}/"
     print(f"SIH26123 dashboard: {url}")
     print(f"repo root: {ROOT}")
+    print(f"fleet: {sim.n_robots} robots, policy={sim.policy}, seed={sim.seed}, {TICK_HZ} ticks/s")
     print("Click a cell to block it. Block aisle for the chaos beat.")
     print("Ctrl+C to stop.")
     if not args.no_browser:
@@ -87,18 +88,20 @@ def main() -> None:
         except Exception:  # no browser on this host; the URL above still works
             pass
 
-    interval = 1.0 / TICK_HZ
+    # The dashboard owns the clock: it consumes ticks at the requested speed and
+    # steps the shadow twin in lock-step, so the local demo shows the same
+    # comparison the deployed page does.
+    stop = threading.Event()
+    driver = threading.Thread(target=dash.run_forever, args=(stop,), daemon=True, name="fleet-driver")
+    driver.start()
     try:
-        while True:
-            t0 = time.perf_counter()
-            with dash.lock:
-                sim.step()
-            leftover = interval - (time.perf_counter() - t0)
-            if leftover > 0:
-                time.sleep(leftover)
+        while driver.is_alive():
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("\nstopping")
     finally:
+        stop.set()
+        driver.join(timeout=2.0)
         httpd.shutdown()
         httpd.server_close()
 
