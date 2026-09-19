@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="820" viewBox="0 0 1240 820" font-family="DejaVu Sans, Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37474f"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1565c0"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c62828"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="820" fill="#fbfcfd"/>
+  <text x="24" y="40" font-size="24" font-weight="bold" fill="#102a43">SIH26123 Edge-AI Distributed Fleet Coordination — edge deployment architecture</text>
+  <text x="24" y="66" font-size="14" fill="#486581">Fleet decisions on three Raspberry Pis · warehouse world simulated on the host PC · peer-to-peer UDP between agents · no central scheduler</text>
+
+  <!-- LAN boundary -->
+  <rect x="24" y="92" width="1192" height="628" rx="14" fill="none" stroke="#bcccdc" stroke-dasharray="8 6"/>
+  <text x="40" y="116" font-size="13" fill="#829ab1">demo LAN 192.168.50.0/24 · UDP · host 192.168.50.10</text>
+
+  <!-- Host -->
+  <rect x="60" y="150" width="330" height="500" rx="12" fill="#eef4fb" stroke="#2f6fb2" stroke-width="2"/>
+  <text x="80" y="180" font-size="17" font-weight="bold" fill="#0b3d6b">HOST PC — 192.168.50.10</text>
+  <text x="80" y="201" font-size="13" fill="#37516d">scripts/run_edge_host.py · listens 9100/udp</text>
+
+  <rect x="84" y="218" width="282" height="86" rx="8" fill="#ffffff" stroke="#7ba7d4"/>
+  <text x="98" y="242" font-size="14" font-weight="bold" fill="#12395c">Warehouse physics (world.py)</text>
+  <text x="98" y="262" font-size="12" fill="#37516d">apply_moves · collision counting</text>
+  <text x="98" y="279" font-size="12" fill="#37516d">blocked cells · charger · turnouts</text>
+  <text x="98" y="296" font-size="12" fill="#37516d">operator edits (block_aisle, radio knobs)</text>
+
+  <rect x="84" y="318" width="282" height="74" rx="8" fill="#ffffff" stroke="#7ba7d4"/>
+  <text x="98" y="342" font-size="14" font-weight="bold" fill="#12395c">WMS bulletin relay</text>
+  <text x="98" y="361" font-size="12" fill="#37516d">TASK_ANNOUNCE, from_id="WMS"</text>
+  <text x="98" y="378" font-size="12" fill="#37516d">repeats unheard tasks every 20 ticks</text>
+
+  <rect x="84" y="406" width="282" height="74" rx="8" fill="#ffffff" stroke="#7ba7d4"/>
+  <text x="98" y="430" font-size="14" font-weight="bold" fill="#12395c">Spectator view + metrics</text>
+  <text x="98" y="449" font-size="12" fill="#37516d">read-only snapshot for the dashboard</text>
+  <text x="98" y="466" font-size="12" fill="#37516d">RunMetrics · events · link telemetry</text>
+
+  <rect x="84" y="494" width="282" height="132" rx="8" fill="#fff8e1" stroke="#e0a800"/>
+  <text x="98" y="518" font-size="14" font-weight="bold" fill="#7a5200">Authority boundary (enforced)</text>
+  <text x="98" y="540" font-size="12" fill="#7a5200">MAY: observe · apply ACT · count collisions</text>
+  <text x="98" y="557" font-size="12" fill="#7a5200">MAY: relay bulletins · publish the tick</text>
+  <text x="98" y="579" font-size="12" fill="#b23c17">MAY NOT: pick a winner · arbitrate yields</text>
+  <text x="98" y="596" font-size="12" fill="#b23c17">MAY NOT: plan a route · reserve cells</text>
+  <text x="98" y="613" font-size="12" fill="#b23c17">MAY NOT: claim or bid for a robot</text>
+
+  <!-- Pis -->
+  <rect x="470" y="150" width="230" height="300" rx="12" fill="#f3fbf4" stroke="#2e7d32" stroke-width="2"/>
+  <text x="489" y="180" font-size="16" font-weight="bold" fill="#1b5e20">Pi #1 — R1</text>
+  <text x="489" y="200" font-size="12" fill="#33543a">192.168.50.11 · :9201/udp</text>
+  <rect x="490" y="216" width="190" height="66" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="502" y="238" font-size="13" font-weight="bold" fill="#1b5e20">EdgeAgent</text>
+  <text x="502" y="256" font-size="11" fill="#33543a">Robot (robot.py, unmodified)</text>
+  <text x="502" y="272" font-size="11" fill="#33543a">its own tick loop + socket</text>
+  <rect x="490" y="292" width="190" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="502" y="314" font-size="13" font-weight="bold" fill="#1b5e20">RemoteWorldView</text>
+  <text x="502" y="332" font-size="11" fill="#33543a">width/height/walls/turnouts</text>
+  <text x="502" y="348" font-size="11" fill="#33543a">charger · sense() · in_bounds()</text>
+  <rect x="490" y="366" width="190" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="502" y="388" font-size="13" font-weight="bold" fill="#1b5e20">RemoteRadio</text>
+  <text x="502" y="406" font-size="11" fill="#33543a">broadcast() · receive()</text>
+  <text x="502" y="422" font-size="11" fill="#33543a">direct peer unicast over UDP</text>
+
+  <rect x="730" y="150" width="230" height="300" rx="12" fill="#f3fbf4" stroke="#2e7d32" stroke-width="2"/>
+  <text x="749" y="180" font-size="16" font-weight="bold" fill="#1b5e20">Pi #2 — R2</text>
+  <text x="749" y="200" font-size="12" fill="#33543a">192.168.50.12 · :9202/udp</text>
+  <rect x="750" y="216" width="190" height="66" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="762" y="238" font-size="13" font-weight="bold" fill="#1b5e20">EdgeAgent</text>
+  <text x="762" y="256" font-size="11" fill="#33543a">Robot (robot.py, unmodified)</text>
+  <text x="762" y="272" font-size="11" fill="#33543a">its own tick loop + socket</text>
+  <rect x="750" y="292" width="190" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="762" y="314" font-size="13" font-weight="bold" fill="#1b5e20">RemoteWorldView</text>
+  <text x="762" y="332" font-size="11" fill="#33543a">same 7 members, from OBS</text>
+  <text x="762" y="348" font-size="11" fill="#33543a">no other robot's position</text>
+  <rect x="750" y="366" width="190" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="762" y="388" font-size="13" font-weight="bold" fill="#1b5e20">RemoteRadio</text>
+  <text x="762" y="406" font-size="11" fill="#33543a">broadcast() · receive()</text>
+  <text x="762" y="422" font-size="11" fill="#33543a">loss/delay are real, not simulated</text>
+
+  <rect x="990" y="150" width="200" height="300" rx="12" fill="#f3fbf4" stroke="#2e7d32" stroke-width="2"/>
+  <text x="1009" y="180" font-size="16" font-weight="bold" fill="#1b5e20">Pi #3 — R3</text>
+  <text x="1009" y="200" font-size="12" fill="#33543a">192.168.50.13 · :9203/udp</text>
+  <rect x="1010" y="216" width="160" height="66" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="1022" y="238" font-size="13" font-weight="bold" fill="#1b5e20">EdgeAgent</text>
+  <text x="1022" y="256" font-size="11" fill="#33543a">Robot (unmodified)</text>
+  <text x="1022" y="272" font-size="11" fill="#33543a">independent process</text>
+  <rect x="1010" y="292" width="160" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="1022" y="314" font-size="13" font-weight="bold" fill="#1b5e20">Local decision</text>
+  <text x="1022" y="332" font-size="11" fill="#33543a">auction · UBPA · planning</text>
+  <text x="1022" y="348" font-size="11" fill="#33543a">no host input required</text>
+  <rect x="1010" y="366" width="160" height="64" rx="8" fill="#ffffff" stroke="#8cc79a"/>
+  <text x="1022" y="388" font-size="13" font-weight="bold" fill="#1b5e20">Peers</text>
+  <text x="1022" y="406" font-size="11" fill="#33543a">static peer table</text>
+  <text x="1022" y="422" font-size="11" fill="#33543a">HELLO roster from host</text>
+
+  <!-- Control plane arrows -->
+  <line x1="390" y1="240" x2="470" y2="240" stroke="#1565c0" stroke-width="2.2" marker-end="url(#arrowBlue)"/>
+  <text x="398" y="232" font-size="12" fill="#1565c0">OBS (tick, nearby_blocked)</text>
+  <line x1="470" y1="272" x2="390" y2="272" stroke="#c62828" stroke-width="2.2" marker-end="url(#arrowRed)"/>
+  <text x="398" y="292" font-size="12" fill="#c62828">ACT (destination chosen by the robot)</text>
+  <line x1="390" y1="352" x2="470" y2="352" stroke="#1565c0" stroke-width="2.2" marker-end="url(#arrowBlue)"/>
+  <text x="398" y="344" font-size="12" fill="#1565c0">ACT_RESULT (authoritative position)</text>
+  <line x1="390" y1="386" x2="470" y2="386" stroke="#6a1b9a" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="398" y="404" font-size="12" fill="#6a1b9a">TASK_ANNOUNCE bulletin (no addressee)</text>
+
+  <line x1="390" y1="240" x2="730" y2="240" stroke="#1565c0" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#arrowBlue)"/>
+  <line x1="390" y1="240" x2="990" y2="240" stroke="#1565c0" stroke-width="1.4" stroke-dasharray="6 5" marker-end="url(#arrowBlue)"/>
+
+  <!-- Peer mesh -->
+  <line x1="680" y1="120" x2="730" y2="120" stroke="#00695c" stroke-width="2.4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="960" y1="120" x2="1010" y2="120" stroke="#00695c" stroke-width="2.4" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="680" y1="472" x2="1010" y2="472" stroke="#00695c" stroke-width="2.4" stroke-dasharray="10 6" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="700" y="112" font-size="12" fill="#00695c">R1 ⇄ R2</text>
+  <text x="968" y="112" font-size="12" fill="#00695c">R2 ⇄ R3</text>
+  <text x="700" y="492" font-size="12" fill="#00695c">PEER_STATE · BID · CLAIM · RELEASE · OBSTACLE · YIELD_QUERY/ACK/NACK — direct, no broker</text>
+
+  <!-- Dashboard -->
+  <rect x="470" y="500" width="720" height="126" rx="12" fill="#f7f4fd" stroke="#6a1b9a" stroke-width="2"/>
+  <text x="490" y="528" font-size="16" font-weight="bold" fill="#4a148c">Existing browser dashboard — unchanged</text>
+  <text x="490" y="550" font-size="12" fill="#4a148c">renders the snapshot only: robots, jobs, events, measured panel, forecast</text>
+  <text x="490" y="570" font-size="12" fill="#4a148c">operator actions: policy · env · robots · speed · radio · add_task · remove_task</text>
+  <text x="490" y="588" font-size="12" fill="#4a148c">drain · block_aisle · toggle · clear_blocks · pause · step · reset · forecast</text>
+  <text x="490" y="610" font-size="12" fill="#b23c17">no action can name a winner, choose a route or resolve a conflict (tests T7/T8)</text>
+
+  <line x1="225" y1="650" x2="225" y2="628" stroke="#6a1b9a" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="830" y1="628" x2="830" y2="650" stroke="#6a1b9a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Offline fallback -->
+  <rect x="60" y="740" width="1130" height="56" rx="10" fill="#eef7ee" stroke="#2e7d32" stroke-dasharray="6 5"/>
+  <text x="80" y="762" font-size="13" font-weight="bold" fill="#1b5e20">Offline fallback (unchanged, always available): FleetSim + Dashboard + run_demo.py / RUN_DEMO.bat</text>
+  <text x="80" y="783" font-size="12" fill="#33543a">results/metrics.json stays byte-identical (sha256 6d7d2a96…) · simulation/engine.py · robot.py · world.py · peer.py · maps.py are not edited by the edge work</text>
+</svg>
