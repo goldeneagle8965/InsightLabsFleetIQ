@@ -264,7 +264,14 @@ class Robot:
             elif kind == MSG_OBSTACLE:
                 cell = msg.get("cell")
                 if cell:
-                    self.known_blocked.add((int(cell[0]), int(cell[1])))
+                    c = (int(cell[0]), int(cell[1]))
+                    if msg.get("cleared"):
+                        # An operator cleared the obstacle: forget the cell so the
+                        # fleet can re-plan through it instead of treating it as
+                        # permanently blocked.
+                        self.known_blocked.discard(c)
+                    else:
+                        self.known_blocked.add(c)
             elif kind == MSG_YIELD_QUERY:
                 self._on_yield_query(msg, tick)
             elif kind == MSG_YIELD_ACK:
@@ -576,21 +583,21 @@ class Robot:
         cost = float(d)
         if self.battery < 30:
             cost += AUCTION_BATTERY_PENALTY
-        overlap = 0
-        probe = spatial_path(
+        pick_leg = spatial_path(
             self.pos,
             kt.pick,
             self._blocked(),
             self.world.width,
             self.world.height,
         )
-        probe += spatial_path(
+        drop_leg = spatial_path(
             kt.pick,
             kt.drop,
             self._blocked(),
             self.world.width,
             self.world.height,
         )
+        probe = pick_leg + drop_leg
         peer_cells: set[Pos] = set()
         for p in self.peers.values():
             peer_cells.update(tuple(c) for c in p.planned_path)
@@ -599,7 +606,10 @@ class Robot:
         cost += AUCTION_WORKLOAD * self.workload
         need = max(d, 1) * DRAIN_MOVE
         valid = self.battery >= need
-        if not probe and d > 0:
+        # Both legs must be reachable: a reachable pick leg is not enough if the
+        # drop leg is blocked, otherwise the robot claims an impossible task and
+        # cycles claim -> pick -> fail -> release forever.
+        if d > 0 and (not pick_leg or not drop_leg):
             valid = False
             cost += 1000.0
         return cost, valid

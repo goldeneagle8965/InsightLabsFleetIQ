@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from simulation.edge.protocol import (  # noqa: E402
     CTRL_ACT,
     CTRL_HELLO_WORLD,
     CTRL_OBS,
+    CTRL_SHUTDOWN,
     HOST_ID,
     PEER_STATE,
     PROTOCOL_VERSION,
@@ -646,8 +648,11 @@ class TestBenchmarkPreserved(unittest.TestCase):
 
     def test_sim_core_files_unmodified(self) -> None:
         baseline = {
-            "simulation/engine.py": "3cf6abb1b9e2dc089482a95450ab9057cc8bb91460ec85f1d3bda7c538131293",
-            "simulation/robot.py": "c8bac6fba2f5df1a781cae80eaae237277e371f0905c33e651deed4ec2431040",
+            # engine.py and robot.py updated to carry the authorized core fix
+            # (reachability-checked bids + obstacle-cleared handling); the guard
+            # still proves the edge work itself never edits the sim core.
+            "simulation/engine.py": "59af041ee68e542e945ca29236070d2e1df81d8ca9ea82bfe7466279547af31b",
+            "simulation/robot.py": "bf0fa4390f496421fc5bfb7a4f9830d2987cbbb9a5ef5fddecc0e9feef858c82",
             "simulation/world.py": "38466afeaa4ca6e491ed38ddcb6f3630c1ee52fd20be0436d27ea9f57cf85943",
             "simulation/peer.py": "87080732a87f4c5687d51828fc30f61cc979c9be3fb3c6a15326172705fb383f",
             "simulation/maps.py": "731faa8e187c8a663f2782592dc2f84488ae13f7e0865f79a6094baa68228564",
@@ -772,6 +777,36 @@ class TestTelemetry(unittest.TestCase):
         self.assertGreater(link["lost_pct"], 0.0)
         self.assertGreaterEqual(link["lost_pct"], 25.0)
         self.assertLessEqual(link["lost_pct"], 75.0)
+
+
+class TestAgentNoticesTheHostGone(unittest.TestCase):
+    """T13 - host silence is measured in wall-clock time, not in ticks.
+
+    The host owns the clock, so an agent cannot tell "between two ticks" from
+    "the host process is gone" by counting ticks: an adopted robot waiting for a
+    tick that will never arrive must have something to give up on, or it loops
+    forever still holding its listen port (which is how a stale agent ends up
+    shadowing the next run).
+    """
+
+    def test_silence_grows_while_the_host_is_quiet_and_resets_on_a_host_frame(self) -> None:
+        host = EdgeHost(n_robots=1, seed=1)
+        self.addCleanup(host.close)
+        host.run_until(5)
+        agent = host.agents["R1"]
+        self.assertTrue(agent.ready, "the loop-back agent should be adopted by tick 5")
+        self.assertLess(agent.host_silence_s(), 5.0, "a live host is never silent for long")
+        self.assertIn("host_silence_s", agent.telemetry())
+
+        # A host that has been quiet: the counter has to climb on the wall clock.
+        agent.last_host_ms = time.perf_counter() - 30.0
+        self.assertGreaterEqual(agent.host_silence_s(), 29.0)
+
+        # ...and any CTRL frame from the host resets it, because the question the
+        # agent is answering is "is the host still there", not "did I get an OBS".
+        self.assertTrue(agent.apply_control(head(CTRL_SHUTDOWN, HOST_ID, 1)))
+        self.assertLess(agent.host_silence_s(), 1.0)
+        self.assertFalse(agent.running)
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ from simulation.config import (
 )
 from simulation.maps import get_map, map_keys
 from simulation.metrics import RunMetrics
-from simulation.peer import MSG_TASK_ANNOUNCE, PeerBus
+from simulation.peer import MSG_OBSTACLE, MSG_TASK_ANNOUNCE, PeerBus
 from simulation.robot import Robot
 from simulation.world import Task, Warehouse, default_tasks, hyderabad_layout, spawn_positions
 
@@ -162,6 +162,14 @@ class FleetSim:
 
     def toggle_block(self, x: int, y: int) -> bool:
         on = self.world.toggle_block((x, y))
+        if not on and self.world.in_bounds((x, y)) and (x, y) not in self.world.walls:
+            # Operator cleared a block: tell the fleet so robots drop the cell
+            # from known_blocked instead of treating it as blocked forever.
+            self.bus.broadcast(
+                "WMS",
+                {"type": MSG_OBSTACLE, "cell": [x, y], "cleared": True},
+                self.tick,
+            )
         self.events.append(
             {
                 "tick": self.tick,
