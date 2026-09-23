@@ -1,0 +1,18 @@
+{
+ "cases": 59,
+ "completed_6of6": 59,
+ "task_counts": {
+  "6": 59
+ },
+ "complete_tick_range": [
+  51,
+  77
+ ],
+ "collisions_range": [
+  28,
+  33
+ ],
+ "deadlocks_total": 0,
+ "stalls_total": 0,
+ "handoffs_total": 0
+}

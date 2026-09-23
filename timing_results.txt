@@ -1,0 +1,31 @@
+(19,5)@t20 d1 flip@6895            -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22712, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 1.59, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+(19,5)@t30 d1 flip@6895            -> {'tasks': '5/6', 'ticks': 12000, 'coll': 6720, 'dead': 555, 'stalls': 7, 'hand': 4, 'mean_wait': 0.91, 'lat': 1.57, 'unf': ['T5'], 'held': {'T5': 'R8'}, 'cpt': 0.56}
+(19,5)@t40 d1 flip@6895            -> {'tasks': '5/6', 'ticks': 12000, 'coll': 6720, 'dead': 555, 'stalls': 7, 'hand': 4, 'mean_wait': 0.91, 'lat': 1.57, 'unf': ['T5'], 'held': {'T5': 'R8'}, 'cpt': 0.56}
+(19,5)@t45 d1 flip@6895            -> {'tasks': '5/6', 'ticks': 12000, 'coll': 6720, 'dead': 555, 'stalls': 7, 'hand': 4, 'mean_wait': 0.91, 'lat': 1.57, 'unf': ['T5'], 'held': {'T5': 'R8'}, 'cpt': 0.56}
+(19,5)@t50 d1 flip@6895            -> {'tasks': '5/6', 'ticks': 12000, 'coll': 6720, 'dead': 555, 'stalls': 7, 'hand': 4, 'mean_wait': 0.91, 'lat': 1.57, 'unf': ['T5'], 'held': {'T5': 'R8'}, 'cpt': 0.56}
+(19,5)@t55 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t60 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t65 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t70 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t80 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t100 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t150 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t200 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t300 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t500 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t1000 d1 flip@6895          -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t2000 d1 flip@6895          -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t4000 d1 flip@6895          -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)@t6000 d1 flip@6895          -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+
+(19,5)+(20,5)@t50 d1 flip@6895     -> {'tasks': '5/6', 'ticks': 12000, 'coll': 6720, 'dead': 555, 'stalls': 7, 'hand': 4, 'mean_wait': 0.91, 'lat': 1.57, 'unf': ['T5'], 'held': {'T5': 'R8'}, 'cpt': 0.56}
+(19,5)+(20,5)@t60 d1 flip@6895     -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)+(20,5)@t70 d1 flip@6895     -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)+(20,5)@t80 d1 flip@6895     -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+(19,5)+(20,5)@t100 d1 flip@6895    -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+
+exact4@t50 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+exact4@t60 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+exact4@t70 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+exact4@t80 d1 flip@6895            -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}
+exact4@t100 d1 flip@6895           -> {'tasks': '6/6', 'ticks': 58, 'coll': 32, 'dead': 0, 'stalls': 0, 'hand': 0, 'mean_wait': 0.65, 'lat': 1.99, 'unf': [], 'held': {}, 'cpt': 0.552}

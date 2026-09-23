@@ -1,0 +1,315 @@
+{
+ "config": {
+  "env": "mall",
+  "n": 8,
+  "policy": "ubpa",
+  "seed": 0,
+  "blocks": [
+   [
+    8,
+    4
+   ],
+   [
+    16,
+    4
+   ],
+   [
+    19,
+    4
+   ],
+   [
+    11,
+    6
+   ]
+  ],
+  "block_tick": 20,
+  "flip": 6895,
+  "end": 9992,
+  "delay0": 1
+ },
+ "metrics": {
+  "collision_count": 32,
+  "deadlock_count": 0,
+  "stall_count": 0,
+  "stall_handoff_count": 0,
+  "all_tasks_complete_tick": 76,
+  "mean_wait_ticks": 0.7138157894736842,
+  "total_distance": 174.0,
+  "mean_comm_latency_ticks": 1.991431631560157,
+  "mean_robot_step_ms": 0.1807712171500354,
+  "tasks_done": 6,
+  "tasks_total": 6,
+  "complete": true,
+  "ticks": 76,
+  "policy": "ubpa",
+  "seed": 0,
+  "experiment": ""
+ },
+ "coll_rate_buckets": {
+  "0": 32
+ },
+ "st_fail_buckets": {
+  "0": [
+   0,
+   237
+  ]
+ },
+ "sp_calls_buckets": {
+  "0": 168
+ },
+ "top_pairs": [
+  [
+   [
+    "R2",
+    "R6"
+   ],
+   11
+  ],
+  [
+   [
+    "R4",
+    "R8"
+   ],
+   7
+  ],
+  [
+   [
+    "R3",
+    "R7"
+   ],
+   7
+  ],
+  [
+   [
+    "R1",
+    "R5"
+   ],
+   7
+  ]
+ ],
+ "contested_cells": [
+  [
+   [
+    9,
+    9
+   ],
+   11
+  ],
+  [
+   [
+    19,
+    9
+   ],
+   7
+  ],
+  [
+   [
+    19,
+    1
+   ],
+   7
+  ],
+  [
+   [
+    9,
+    1
+   ],
+   7
+  ]
+ ],
+ "final_state": [
+  {
+   "id": "R1",
+   "phase": "IDLE",
+   "pos": [
+    13,
+    8
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 38,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     13,
+     8
+    ]
+   ]
+  },
+  {
+   "id": "R2",
+   "phase": "IDLE",
+   "pos": [
+    19,
+    5
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 3,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     19,
+     5
+    ]
+   ]
+  },
+  {
+   "id": "R3",
+   "phase": "IDLE",
+   "pos": [
+    9,
+    9
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 34,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     9,
+     9
+    ]
+   ]
+  },
+  {
+   "id": "R4",
+   "phase": "IDLE",
+   "pos": [
+    9,
+    1
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 33,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     9,
+     1
+    ]
+   ]
+  },
+  {
+   "id": "R5",
+   "phase": "IDLE",
+   "pos": [
+    5,
+    8
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 40,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     5,
+     8
+    ]
+   ]
+  },
+  {
+   "id": "R6",
+   "phase": "IDLE",
+   "pos": [
+    9,
+    8
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 39,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     9,
+     8
+    ]
+   ]
+  },
+  {
+   "id": "R7",
+   "phase": "IDLE",
+   "pos": [
+    2,
+    5
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 12,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     2,
+     5
+    ]
+   ]
+  },
+  {
+   "id": "R8",
+   "phase": "IDLE",
+   "pos": [
+    19,
+    9
+   ],
+   "goal": null,
+   "task": null,
+   "tstat": null,
+   "next": null,
+   "stalled": 76,
+   "stuck": 0,
+   "yielW": 0,
+   "deadE": 0,
+   "stEp": 0,
+   "unreach": 0,
+   "path0": [
+    [
+     19,
+     9
+    ]
+   ]
+  }
+ ],
+ "interesting_events": []
+}

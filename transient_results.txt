@@ -1,0 +1,19 @@
+A (19,5)@t20 d1 flip@6895                    -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22712, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 1.59, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+B (19,5)+(20,5)@t20 d1 flip@6895             -> {'tasks': '4/6', 'ticks': 12000, 'coll': 21111, 'dead': 317, 'stalls': 3, 'hand': 2, 'mean_wait': 0.96, 'lat': 1.61, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.759}
+C (19,5)@t20 clear@300 d1                    -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22715, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 2.0, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+D (19,5)@t20 clear@300 (19,4)@t400 d1        -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22715, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 2.0, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+E (19,5)@t20 d0                              -> {'tasks': '5/6', 'ticks': 12000, 'coll': 12521, 'dead': 491, 'stalls': 4, 'hand': 1, 'mean_wait': 0.86, 'lat': 1.0, 'unf': ['T5'], 'held': {'T5': 'R2'}, 'cpt': 1.043}
+F (19,5)@t20 clear@100 d1                    -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22715, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 2.0, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+G exact+(19,5)@t20 clear(19,5)@t300 d1       -> {'tasks': '4/6', 'ticks': 12000, 'coll': 22715, 'dead': 459, 'stalls': 2, 'hand': 61, 'mean_wait': 0.99, 'lat': 2.0, 'unf': ['T5', 'T6'], 'held': {}, 'cpt': 1.893}
+Traceback (most recent call last):
+  File "C:\Users\Naseer\Downloads\Hackathon Project 2026\Main\SIH 26123 Completed\sih26123\poc_diag_26123_transient.py", line 124, in <module>
+    main()
+  File "C:\Users\Naseer\Downloads\Hackathon Project 2026\Main\SIH 26123 Completed\sih26123\poc_diag_26123_transient.py", line 108, in main
+    run(name, seed, delay, sched, flip_at=flip, flags=flags)
+  File "C:\Users\Naseer\Downloads\Hackathon Project 2026\Main\SIH 26123 Completed\sih26123\poc_diag_26123_transient.py", line 47, in run
+    flags=make_flags(**(flags or {})))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Naseer\Downloads\Hackathon Project 2026\Main\SIH 26123 Completed\sih26123\poc_diag_26123_transient.py", line 38, in make_flags
+    setattr(base, k, v)
+  File "<string>", line 4, in __setattr__
+dataclasses.FrozenInstanceError: cannot assign to field 'stall_handoff'
