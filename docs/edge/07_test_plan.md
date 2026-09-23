@@ -1,14 +1,19 @@
 # 07 — Test plan
 
-Two new files covering T1-T11 as 41 `unittest` methods, all runnable without hardware and without new
-dependencies:
+Two new files covering T1-T11 as 42 `unittest` methods, plus a third covering T12 (the LAN admission path)
+as 17 more — 59 edge tests in total, all runnable without hardware and without new dependencies:
 
 ```bash
 python -m unittest tests.test_edge_agent tests.test_edge_no_central_scheduler
-# full suite
-python -m unittest tests.test_mandatory tests.test_dashboard_contract tests.test_web_entry \
-                   tests.test_edge_agent tests.test_edge_no_central_scheduler
+python -m unittest tests.test_edge_lan_integration
+# full suite (91 tests; note tests/ has no __init__.py, so unittest discovery is not used)
+for m in test_mandatory test_dashboard_contract test_dashboard_is_not_required_for_decision \
+         test_web_entry test_edge_agent test_edge_no_central_scheduler test_edge_lan_integration; \
+  do python -m unittest tests.$m; done
 ```
+
+`T12` is the one that needs real sockets: three separate interpreters, three real UDP listen ports, and a
+long-running host process — the same code path `edge-pi` will take, minus the second machine.
 
 Design of the plan: **T1 is an equality test, not a smoke test.** The edge path must reproduce the
 existing simulation bit-for-bit in lock-step loopback mode, otherwise "same robot logic runs locally or
@@ -32,6 +37,7 @@ connects to the simulator" is an unproven claim. Everything after T1 tests the t
 | T9 | `test_benchmark_digest_unchanged` | `test_edge_agent.py` | shipped benchmark preserved |
 | T10 | `test_offline_fallback_intact` | `test_edge_agent.py` | deterministic sim still works; agent is stdlib-only |
 | T11 | `test_telemetry_exposes_link_health` | `test_edge_agent.py` | degradation is measured, not asserted |
+| T12 | `TestThreeAgentsOverRealSockets`, `TestAnUnadoptedAgentGivesUp` | `test_edge_lan_integration.py` | the whole thing runs as separate processes over real UDP: bind, adopt, decide, die, rejoin, give up |
 
 ---
 
@@ -46,7 +52,7 @@ both one tick at a time.)
 **Assertions.**
 
 1. Per-tick, per-robot position sequences are identical for the whole run (not just at the end).
-2. `world.robots` final state is identical; `collision_events` identical.
+2. `world.robots` final state is identical; `collision_events` identical. (Both counters mean *conflicting claims, deduplicated per robot pair per tick* — see T4 step 4 — so "identical" compares conflict counts, not physical near-misses.)
 3. `RunMetrics.to_dict()` matches on `collision_count`, `deadlock_count`, `stall_count`,
    `stall_handoff_count`, `all_tasks_complete_tick`, `total_distance`, `tasks_done`, `tasks_total`
    (`mean_robot_step_ms` is timing-only and excluded).
@@ -111,7 +117,10 @@ answered identically by the network view.
 2. Send an `ACT` for a robot the host does not know ⇒ ignored, counted, no world mutation.
 3. Send an out-of-bounds `ACT` and an `ACT` into a wall ⇒ robot stays; `blocked_by` says `bounds`/`wall`.
 4. Two agents intentionally send the same empty cell ⇒ `apply_moves` counts one collision, both stay, and
-   both are told `collision = true`. No arbitration happens anywhere.
+   both are told `collision = true`. No arbitration happens anywhere. Note the units: one event per
+   unordered robot pair per tick (`collision_pairs` dedupe key is `(a, b, tick)`). The same pair conflicting
+   on consecutive ticks is one event per tick, a three-way claim for one cell is two events, and a step into
+   a cell whose occupant is *staying* is a blocked step, not a collision at all.
 5. Patch `host.apply` to record calls: assert the only destination ever passed to `apply_moves` is one
    that arrived in an `ACT` (or the robot's own current position). This is the behavioural twin of T7.
 
@@ -246,7 +255,10 @@ does the same in a small presentation adapter. So the UI does not fork and the c
 | Benchmark preserved | T9 |
 | Offline fallback intact | T10 |
 | Nothing regressed | the pre-existing 25 tests still green |
+| Runs as separate processes | T12 (three interpreters, real sockets, host admits by source address, a real agent dies and rejoins, an unadopted agent exits rather than squatting a port) |
 
-**Pass condition for the whole pack:** the 25 existing tests plus T1-T11 green, `results/metrics.json`
-digest unchanged, and the edge loop-back run reporting the same completion tick as `FleetSim` for the
-same seed. Anything less is reported as a limitation rather than presented as a result.
+**Pass condition for the whole pack:** the 32 pre-existing tests (25 simulation + 7 dashboard-independence)
+plus T1-T12 green, `results/metrics.json` and `results/degradation.json` digests unchanged, and the edge
+loop-back run reporting the same completion tick as `FleetSim` for the same seed. As shipped: 91 tests, OK,
+with `metrics.json = 6d7d2a96…4f8` unchanged. Anything less is reported as a limitation rather than presented
+as a result.

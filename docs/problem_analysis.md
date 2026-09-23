@@ -28,9 +28,9 @@ A global scheduler that *looks* decentralized on a dashboard is the failure mode
 
 ## What this prototype is / is not
 
-**Implemented:** grid warehouse, independent robot processes, simulated radio, auction, space-time local planner, UBPA yield, obstacle broadcast, live dashboard, experiments, tests.
+**Implemented:** grid warehouse, independent **robot decision stacks** (one OS process in the benchmark run; one process per robot over real UDP on the edge path — `simulation/edge/`, `tests/test_edge_lan_integration.py`), simulated radio, auction, space-time local planner, UBPA yield, obstacle broadcast, live dashboard, experiments, tests.
 
-**Simulated:** radio, lidar-range obstacle sensing, battery drain, edge CPU time (process time per robot tick).
+**Simulated:** radio in the benchmark path (the edge path sends real datagrams), lidar-range obstacle sensing, battery drain. Edge CPU time is **measured**, not simulated: each edge node times its own tick loop and reads its own process CPU/RSS via `process_resources` (`simulation/edge/agent.py`), emitted with `--summary-json` and rolled up by `scripts/edge_hw_summary.py`. On platforms without the `resource` module or `/proc`, those fields are reported as **not measured** rather than estimated.
 
 **Not claimed:** real AMRs, real 5G/Wi-Fi mesh, on-robot GPU inference, warehouse production deployment.
 

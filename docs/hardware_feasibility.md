@@ -21,7 +21,7 @@ not been built. Everything marked *measured in the sim* comes from this reposito
 | A configurable, lossy, delayed peer channel (`drop_prob`, `delay` ticks) and recovery when it degrades | Real per-robot link latency and loss on a warehouse floor with metal racking |
 | Right-of-way arbitration at narrow junctions using only local sensing + peer state | That a physical turnout bay has the geometry the protocol assumes |
 | Opportunity charging with a queue at one charger | Dock alignment repeatability and charge power at real battery temperatures |
-| Age-corrected peer prediction surviving a 3-tick stale link with **0 collisions** (measured in the sim) | That the same result holds with a real, jittery link |
+| Age-corrected peer prediction surviving a 3-tick stale link with **0 collisions** (measured in the sim, on the default 3-robot/6-task scenario only) | That the same result holds with a real, jittery link |
 | Per-robot decision cost of **0.11 ms/step** (measured in the sim, dev laptop) | That an embedded computer keeps the decision loop inside the cell-time budget |
 
 The honest summary: the prototype proves the **protocol and the recovery mechanisms**. Hardware

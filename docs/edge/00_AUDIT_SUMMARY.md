@@ -9,8 +9,11 @@ penetration test: no target other than this repository was touched.
 
 | Evidence | Command | Result |
 | --- | --- | --- |
-| Test suite | `python -m unittest tests.test_mandatory tests.test_dashboard_contract tests.test_web_entry` | 25 tests, all green (~1.8 s) |
-| Edge suite (added by this pack) | `python -m unittest tests.test_edge_agent tests.test_edge_no_central_scheduler` | 41 tests, all green; includes the T1 lock-step parity equality and the T7/T8 "no central scheduler" guards |
+| Existing suite | `python -m unittest tests.test_mandatory tests.test_dashboard_contract tests.test_web_entry` | 25 tests, all green (~1.8 s) |
+| Edge suite (added by this pack) | `python -m unittest tests.test_edge_agent tests.test_edge_no_central_scheduler` | 42 tests, all green; includes the T1 lock-step parity equality and the T7/T8 "no central scheduler" guards |
+| Edge LAN suite (real sockets) | `python -m unittest tests.test_edge_lan_integration` | 17 tests, all green (~10 s); three separate interpreters over real UDP, host admission by source address, agent death and rejoin, duplicate-claim and rebind rules, exclusive-bind refusal (exit 2), unadopted give-up (exit 3) |
+| Dashboard independence | `python -m unittest tests.test_dashboard_is_not_required_for_decision` | 7 tests, all green |
+| Whole tree | the seven modules above, run one at a time (`tests/` has no `__init__.py`, so discovery is not used) | **91 tests, OK** |
 | Shipped benchmark | `python scripts/run_experiments.py` (fresh output dir) | reproduces `results/metrics.json`; sha256 `6d7d2a9600cd99dbb0e7419a7554747c0610119c078b010ce8f07806e1cea4f8` |
 | Process model | `grep -rnE "multiprocessing\|asyncio\|socket\|subprocess" simulation/` | no hit in the simulation path; only `threading` in `dashboard.py` |
 
@@ -51,8 +54,8 @@ Status vocabulary used throughout this pack:
 | 11 | Forbidden: central path coordinator reserving cells | **NOT PRESENT** | `world.apply_moves` only *records* the robots' own intentions and counts collisions; it never picks a move |
 | 12 | Forbidden: hardcoded winner / placeholder `resolve_deadlock` | **NOT PRESENT** | `_resolve_conflict` is a full UBPA comparison; no `if robot_id == "R1"` anywhere |
 | 13 | Forbidden: hardcoded metric strings in the UI | **NOT PRESENT** | every headline number in `frontend/static/app.js` comes from a snapshot field; no literal metric values in the JS |
-| 14 | Robots run as **independent processes / on separate hardware** | **MISSING** | `engine.py:138-139` — one `for bot in self.robots: bot.step(tick)` loop, single process, no threads |
-| 15 | Peer messaging over a **real network** between agents | **SIMULATED-ONLY** | `peer.py:PeerBus` — `deque` + `defaultdict(list)` mailboxes, no sockets |
+| 14 | Robots run as **independent processes / on separate hardware** | **MISSING in the simulation path; built by the edge pack** | `engine.py:138-139` — one `for bot in self.robots: bot.step(tick)` loop, single process, no threads. The edge path runs each robot as its own OS process over real UDP (`simulation/edge/`, `scripts/run_edge_host.py` + `run_edge_agent.py`), proven by `tests/test_edge_lan_integration.py` (three interpreters, `3/3` admitted). Two physical machines remain unexercised — doc 05 §10 |
+| 15 | Peer messaging over a **real network** between agents | **SIMULATED-ONLY in the benchmark path; real UDP on the edge path** | `peer.py:PeerBus` — `deque` + `defaultdict(list)` mailboxes, no sockets; `FleetSim` keeps using it. `simulation/edge/radio.py:UdpRadio` sends real datagrams (peer unicast between agents, the host address allow-listed for control frames), and the host never relays peer traffic (`peer_leaked` counter) |
 | 16 | On-**device** inference at the edge | **MISSING** | UBPA is closed-form arithmetic on locally held state; no model, no accelerator, no ML runtime. Calling it "Edge-AI" is only defensible as "on-device decision stack" |
 | 17 | Battery-aware behaviour (bidding penalty, drive-to-charger) | **IMPLEMENTED / UNEXERCISED** | `config.py:22-27`, `robot.py:429 _maybe_charge`; E1 UBPA travels ~151 moves ≈ 27 battery units, so `CHARGE_THRESHOLD = 20` is never crossed. Only the dashboard `drain` action forces a charge cycle |
 | 18 | Fleet scaling beyond the demo 3 robots | **DEMONSTRATED** | `engine.py:216 set_robots` (3–8), exercised by the dashboard contract test across every map |
@@ -71,6 +74,10 @@ fixed by an explicit correction in this pack rather than by deleting the origina
 | "Edge-AI" as a modelling claim | `README.md`, decks | UBPA is a heuristic, no learned model | "on-device coordination policy"; keep the AI framing for the negotiation/auction layer, which is real |
 | Dashboard "runs" the fleet | reader's likely assumption | the dashboard *drives* a `FleetSim` at a wall-clock multiplier and edits operator parameters; it holds no decision authority (`grep` for winner/assign in `dashboard.py` returns only a docstring) | documents 01/03 + test `T8` freeze this as a contract |
 | Shadow twin "compares UBPA vs stop-and-wait live" | `dashboard.py:_shadow_view` | true, and it is measurement only — a second `FleetSim` with the same seed, driven for the side panel | keep, but label as *measurement*, and assert by test that the shadow never writes into the live sim |
+| "5 seeds", read as five independent trials | `README.md`, `docs/evaluation.md`, the decks | re-measured directly, seeds 1–5 return **identical** outcome metrics on E1 for both policies (same completion, tick, collisions, deadlocks, distance); only wall-clock `mean_robot_step_ms` moves | call them a **determinism check, not n = 5**: see the new *Seeds* section of `docs/evaluation.md`. Real variation is shown by the degraded-radio and scale sweeps, where the scenario changes |
+| `collision_count` read as robot-on-robot contact | `docs/evaluation.md` metric list, decks | `world.apply_moves` counts **conflicting claims deduplicated per pair per tick**: a conflict over consecutive ticks counts once per tick, a three-way claim for one cell counts as two pairs, and a blocked step into an occupied cell is not a collision at all | documented in the metric list of `docs/evaluation.md` and in doc 07 §4/T4; both policies are scored by the same rule |
+| "UBPA = 0 collisions" without a qualifier | `README.md`, decks, `docs/hardware_feasibility.md` | true on the E1/E2/E3 layouts; on a low-contention aisle layout with three short jobs UBPA records **4 conflicts and finishes 11 ticks later than stop-and-wait** (47 → 58) | spawn-specific claim: the counterexample and its reproduction snippet are published in `docs/evaluation.md` ("Where UBPA is not the better policy") and `docs/demo_script.md` |
+| An implied "percentage target" for the benchmark | repo-wide search, including `SIH_2026_Problem_Statements.pdf` line 216 | there is **no percentage target in any source**: the problem statement is one line, and the prototype guide's instruction is to "compare against a stop-and-wait baseline and report only measured improvement" | state the E1 result as **completion and robustness**, never as a conversion of the 800-tick horizon against the 93-tick finish |
 
 ---
 
@@ -116,6 +123,8 @@ with those seven attributes plus a two-method radio can host an unmodified `Robo
 | E3 | UBPA | 0.0 | 0.0 | 0.0 | 6/6 | 99 (all seeds) | 171.0 | 0.424 |
 
 sha256 of the file: `6d7d2a9600cd99dbb0e7419a7554747c0610119c078b010ce8f07806e1cea4f8`.
+
+Two footnotes on that table. `Collisions` is *conflicting claims deduplicated per robot pair per tick* (see §3), not robot-on-robot contact, and a blocking step into an occupied cell is not counted at all. And "93 (all seeds)" is literal: the five seeds return the same finish tick and the same counts, which is a determinism property, not a mean — so the seed axis is n = 1 in outcome terms.
 
 **Constraint accepted by this pack:** the edge work must not perturb this file. The edge code lives
 under `simulation/edge/` and `scripts/run_edge_*.py` and is *additive*; `engine.py`, `robot.py`,

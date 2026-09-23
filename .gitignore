@@ -20,4 +20,7 @@ scripts/_gh_device_login.py
 gh_login_out.txt
 *.zip
 results/remeasure_metrics.json
+# Local edge hardware-run records (per-node --summary-json output + merged summary).
+# Scratch evidence collected on a laptop/Pi, not source.
+hw_runs/
 *.pptx

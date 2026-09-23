@@ -13,11 +13,20 @@ Transports
     The same messages travel over real UDP sockets on one machine
     (``edge-lan`` in doc 01 section 7). Useful for rehearsing loss/latency before
     touching hardware.
+``lan``
+    The robots are separate processes, one per machine or per terminal. The host
+    binds exactly the port it was given, waits ``--join-timeout`` for each robot's
+    ``HELLO``, and pins the source address of that datagram as the robot's control
+    address. A robot that never checks in simply never moves; a robot that goes
+    quiet is reported ``dead`` and may rejoin from the same address at any time.
+    This is the ``edge-pi`` path of doc 01.
 
-Known limitation (stated, not hidden): the host drives its *own* in-process
-agents and uses UDP as the transport between them. It does not yet accept agent
-processes running on separate machines, so the ``edge-pi`` variant in doc 01 is
-a design target rather than something this script performs.
+Run three robots against one host:
+
+    python scripts/run_edge_host.py --transport lan --robots 3
+    python scripts/run_edge_agent.py --id R1 --host 127.0.0.1:9100 --listen 127.0.0.1:9201
+    python scripts/run_edge_agent.py --id R2 --host 127.0.0.1:9100 --listen 127.0.0.1:9202
+    python scripts/run_edge_agent.py --id R3 --host 127.0.0.1:9100 --listen 127.0.0.1:9203
 
 Stdlib only; safe to launch from any working directory.
 """
@@ -25,6 +34,7 @@ Stdlib only; safe to launch from any working directory.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
 import time
@@ -38,8 +48,12 @@ if str(ROOT) not in sys.path:
 from simulation.config import MAX_TICKS_DEMO, TICK_HZ  # noqa: E402
 from simulation.dashboard import Dashboard, serve  # noqa: E402
 from simulation.edge import EdgeHost  # noqa: E402
+from simulation.edge.agent import process_resources  # noqa: E402
 from simulation.engine import FleetSim  # noqa: E402
 from simulation.maps import map_keys  # noqa: E402
+
+#: Host process start, for the ``process_uptime_s`` field of the summary.
+PROCESS_START = time.perf_counter()
 
 
 class EdgeSession:
@@ -131,7 +145,15 @@ class EdgeSession:
         return (int(raw[0]), int(raw[1]))
 
 
+def resolve_transport(args: argparse.Namespace) -> str:
+    """``auto`` keeps the historical behaviour: agent addresses given => UDP."""
+    if args.transport != "auto":
+        return str(args.transport)
+    return "udp" if args.agents else "loopback"
+
+
 def build_host(args: argparse.Namespace) -> EdgeHost:
+    transport = resolve_transport(args)
     host = EdgeHost(
         n_robots=max(3, args.robots),
         policy=args.policy,
@@ -141,14 +163,16 @@ def build_host(args: argparse.Namespace) -> EdgeHost:
         radio_delay=args.delay,
         max_ticks=args.max_ticks,
     )
-    if args.agents:
+    if transport in ("udp", "lan"):
         udp_host, _, udp_port = args.udp.partition(":")
-        host.transport = "udp"
+        host.transport = transport
         host.udp_host = udp_host or "0.0.0.0"
         host.udp_base_port = int(udp_port or 9100)
         host.advertise = args.advertise
+        # LAN mode has no silent fallback: a host that quietly moved to another
+        # port would look exactly like three robots failing to connect.
         host.reset()
-        if host.transport != "udp":
+        if host.transport != transport:
             print("! UDP bind failed; falling back to loop-back", file=sys.stderr)
     return host
 
@@ -157,7 +181,12 @@ def pump(host: EdgeHost, session: EdgeSession, stop: threading.Event, tick_hz: i
     period = 1.0 / max(1, tick_hz)
     while not stop.is_set():
         started = time.perf_counter()
-        if not host.paused and host.tick < host.max_ticks:
+        if not host.paused:
+            if host.tick >= host.max_ticks:
+                # Past the horizon the clock is frozen, so there is nothing left to
+                # do but report. (A paused host still waits: that is the operator's.)
+                print(f"tick horizon reached ({host.max_ticks}); stopping")
+                break
             host.step()
             if host.tick % 40 == 0:
                 m = host.metrics()
@@ -173,9 +202,15 @@ def pump(host: EdgeHost, session: EdgeSession, stop: threading.Event, tick_hz: i
 
 def main() -> int:
     p = argparse.ArgumentParser(description="SIH26123 edge host (world + spectator)")
+    # --transport is documented in the module docstring; --lan is the shorthand
+    # used by the deployment notes.
     p.add_argument("--agents", default="", help="R1=host:port,... enables UDP transport")
-    p.add_argument("--udp", default="0.0.0.0:9100", help="host bind address for UDP mode")
+    p.add_argument("--transport", choices=("auto", "loopback", "udp", "lan"), default="auto",
+                   help="auto = udp when --agents is given, else loopback")
+    p.add_argument("--udp", default="0.0.0.0:9100", help="host bind address for UDP/LAN mode")
     p.add_argument("--advertise", default="127.0.0.1", help="address agents should send to")
+    p.add_argument("--join-timeout", type=float, default=10.0,
+                   help="LAN mode: seconds to wait for the robots' HELLOs before ticking")
     p.add_argument("--tick-hz", type=int, default=TICK_HZ)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--policy", choices=("ubpa", "stop_wait"), default="ubpa")
@@ -186,19 +221,45 @@ def main() -> int:
     p.add_argument("--max-ticks", type=int, default=MAX_TICKS_DEMO)
     p.add_argument("--headless", action="store_true", help="run to completion, print metrics, exit")
     p.add_argument("--serve", default="", help="host:port to serve the dashboard, e.g. 127.0.0.1:8765")
+    p.add_argument(
+        "--summary-json",
+        default=None,
+        metavar="PATH",
+        help="write the end-of-run host summary to PATH (feeds scripts/edge_hw_summary.py)",
+    )
     args = p.parse_args()
 
-    host = build_host(args)
+    try:
+        host = build_host(args)
+    except OSError as exc:
+        print(f"! cannot start the host: {exc}", file=sys.stderr)
+        return 2
     session = EdgeSession(host, env=args.env, seed=args.seed, n_robots=max(3, args.robots), policy=args.policy)
     print(f"edge host: transport={host.transport} agents={','.join(host.order)} "
           f"seed={args.seed} env={args.env} policy={args.policy}")
+    if host.transport == "lan":
+        bound = host.sock.getsockname() if host.sock is not None else (args.udp, 0)
+        print(f"waiting up to {args.join_timeout:g}s for HELLO on udp {bound[0]}:{bound[1]} "
+              f"(robots: {', '.join(host.order)})")
+        joined = host.await_agents(args.join_timeout)
+        print(f"admitted {joined}/{len(host.order)} robots before the first tick")
+        if joined < len(host.order):
+            holding = [rid for rid in host.order if host.agent_state(rid) == "boot"]
+            print(f"! no HELLO yet from {', '.join(holding)}; their cells stay put until they call in",
+                  file=sys.stderr)
 
     stop = threading.Event()
     thread = threading.Thread(target=pump, args=(host, session, stop, args.tick_hz), daemon=True)
 
     if args.serve:
         srv_host, _, srv_port = args.serve.partition(":")
-        httpd = serve(session, host=srv_host or "127.0.0.1", port=int(srv_port or 8765))
+        try:
+            httpd = serve(session, host=srv_host or "127.0.0.1", port=int(srv_port or 8765))
+        except OSError as exc:
+            # A busy dashboard port must not stop the fleet: the decisions do not
+            # depend on the server existing.
+            print(f"! cannot serve the dashboard: {exc}", file=sys.stderr)
+            return 2
         print(f"dashboard: http://{srv_host or '127.0.0.1'}:{srv_port or 8765}/  (Ctrl-C to stop)")
         thread.start()
         try:
@@ -224,8 +285,63 @@ def main() -> int:
           f"complete_tick={m.all_tasks_complete_tick} tasks={m.tasks_done}/{m.tasks_total} "
           f"collisions={m.collision_count} deadlocks={m.deadlock_count}")
     print(f"link: {host.link()}")
+    # Machine-readable end-of-run record. One line with its own ``host_summary ``
+    # prefix, so a log that also carries agent ``summary `` lines stays parseable.
+    host_record = _host_summary(host, args, m)
+    print("host_summary " + json.dumps(host_record, sort_keys=True), flush=True)
+    if args.summary_json:
+        _write_summary(args.summary_json, host_record)
+    # Say goodbye while the socket is still open: a robot whose host stops normally
+    # should exit at once rather than wait out its silence window. A host that dies
+    # without this line is covered by the agent's own --host-timeout, which is why
+    # the two paths exist separately.
+    host.stop()
     host.close()
     return 0
+
+
+def _host_summary(host: EdgeHost, args: argparse.Namespace, m: Any) -> dict[str, Any]:
+    """Fleet-wide end-of-run record: outcomes, transport health, and host CPU/RAM.
+
+    Every number here is read off the live host: nothing is recomputed from
+    expectations. ``resources`` is measured with stdlib facilities only and reports
+    ``available: false`` with a reason on a platform that cannot supply them.
+    """
+    return {
+        "role": "host",
+        "transport": host.transport,
+        "tick": host.tick,
+        "max_ticks": host.max_ticks,
+        "policy": args.policy,
+        "seed": args.seed,
+        "env": args.env,
+        "robots": len(host.order),
+        "expected_robots": len(host.order),
+        "admitted": int(host.admissions),
+        "dashboard": bool(args.serve),
+        "full": bool(m.complete),
+        "complete_tick": m.all_tasks_complete_tick,
+        "tasks_done": m.tasks_done,
+        "tasks_total": m.tasks_total,
+        "collisions": m.collision_count,
+        "deadlocks": m.deadlock_count,
+        "stalls": m.stall_count,
+        "metrics": m.to_dict(),
+        "link": host.link(),
+        "process_uptime_s": round(time.perf_counter() - PROCESS_START, 3),
+        "resources": process_resources(time.perf_counter() - PROCESS_START),
+    }
+
+
+def _write_summary(path: str, record: dict[str, Any]) -> None:
+    """Best-effort write of ``record``; never changes the run's exit status."""
+    try:
+        out = Path(path)
+        if out.parent and not out.parent.exists():
+            out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(record, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"could not write --summary-json {path}: {exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

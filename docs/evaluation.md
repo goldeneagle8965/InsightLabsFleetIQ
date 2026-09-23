@@ -8,7 +8,7 @@ Tick limit: 800. Improvement is `(baseline - ours) / baseline` **only when both 
 
 | ID | Setup | What it answers |
 |---|---|---|
-| E1 | 3 robots, 6 tasks, 5 seeds, no extra blocks | throughput vs baseline |
+| E1 | 3 robots, 6 tasks, 5 seeds, no extra blocks | completion and robustness vs baseline |
 | E2 | Forced head-on in a 1-wide aisle (3 seeds) | deadlock resolution |
 | E3 | Aisle cell `(12, 4)` blocked at tick 16 (3 seeds) | reroute after a live obstacle |
 
@@ -16,7 +16,7 @@ E3 used to block `(8, 4)` at tick 40. By then that cell was already off remainin
 
 ## Metrics
 
-- `collision_count` — same-cell claims or 2-way swaps (not freeze-loop occupancy)
+- `collision_count` — conflicting *claims* on one tick, deduplicated per pair per tick: same-cell claims or 2-way swaps (not freeze-loop occupancy). A conflict that persists over consecutive ticks is counted once per tick; a three-way claim for one cell counts as two pairs. It therefore counts *intention conflicts*, not robot-on-robot contact and not elapsed conflict time. Both policies are measured with the same rule.
 - `deadlock_count` — stalemate timeouts on the robot that is stuck; a detector-dependent number (see the ablation note)
 - `stall_count` — fleet-level episodes of no completion and no movement for `STALL_WINDOW` ticks
 - `stall_handoff_count` — tasks a holder gave back after `STALL_HANDOFF_EPISODES` stall episodes on it (RC5)
@@ -30,7 +30,7 @@ E3 used to block `(8, 4)` at tick 40. By then that cell was already off remainin
 
 Source: `results/metrics.json`. Means across seeds. `mean_robot_step_ms` omitted here because it is a host-clock proxy, not a warehouse KPI.
 
-### E1 — throughput
+### E1 — completion and robustness
 
 | metric | stop-and-wait | UBPA |
 |---|---|---|
@@ -71,7 +71,50 @@ Source: `results/metrics.json`. Means across seeds. `mean_robot_step_ms` omitted
 | distance | 104.0 | 171.0 |
 | mean comm latency (ticks) | 1.998 | 1.982 |
 
+E1 is a **completion and robustness** result: the baseline does not finish and UBPA does, with zero conflicts. It is not a speed result, and the table's tick column must not be turned into a percentage (see "How to read this").
+
 E1's completion tick moved from 72 to 93 when RC2 (age-corrected peer reservations) landed. That is a real cost, not a measurement artefact: with RC2 switched off the same seeds still finish in 72 ticks, but they produce 2 intention conflicts. The clean case now pays 21 ticks for reservation correctness that the degraded and scaled cases need.
+
+## Seeds: what the five seeds do and do not show
+
+Every row above is a mean over seeds 1–5. Re-measured directly, E1's five seeds return *identical* outcome metrics:
+
+| seed | stop-and-wait: finished / tasks / collisions / deadlocks | UBPA: finished / tasks / complete tick / collisions / deadlocks |
+|---|---|---|
+| 1 | no / 0-6 / 2 / 2 | yes / 6-6 / 93 / 0 / 0 |
+| 2 | no / 0-6 / 2 / 2 | yes / 6-6 / 93 / 0 / 0 |
+| 3 | no / 0-6 / 2 / 2 | yes / 6-6 / 93 / 0 / 0 |
+| 4 | no / 0-6 / 2 / 2 | yes / 6-6 / 93 / 0 / 0 |
+| 5 | no / 0-6 / 2 / 2 | yes / 6-6 / 93 / 0 / 0 |
+
+Only `mean_robot_step_ms` moves between seeds (stop-and-wait 0.149–0.167 ms, UBPA 0.099–0.126 ms) because that is a wall-clock reading of this laptop, and it is already excluded from any parity claim for that reason.
+
+So on these scenarios the seeds are **n = 1 in outcome terms**, not five independent trials. They show the result does not hinge on the RNG draw for a given layout; they do **not** show run-to-run variance. The variance that is actually measured lives in the degraded-radio and scale sweeps below, where the scenario changes rather than the seed.
+
+## Where UBPA is not the better policy
+
+The benchmark above is one layout with six jobs. In a low-contention layout the same shipped code has UBPA finishing *later* and recording *more* conflicts than the baseline it replaces. Reproduce it read-only (this touches nothing in `results/`):
+
+```python
+from simulation.engine import FleetSim
+from simulation.world import default_tasks
+
+spawn = [(4, 4), (20, 4), (12, 8)]   # the y=4 aisle ends plus one highway cell
+for policy in ("stop_wait", "ubpa"):
+    m = FleetSim(policy=policy, seed=1, max_ticks=800,
+                 tasks=default_tasks()[:3], spawn=list(spawn)).run_until(800)
+    print(policy, m.complete, m.all_tasks_complete_tick,
+          m.collision_count, m.deadlock_count)
+```
+
+| policy | finished | complete tick | collisions | deadlocks |
+|---|---|---|---|---|
+| stop-and-wait | yes | 47 | 1 | 0 |
+| UBPA | yes | 58 | 4 | 0 |
+
+Both finish, and the baseline is 11 ticks faster with three fewer intention conflicts. When the robots already start apart on the aisle and the job list is short, UBPA's reservation traffic has nothing to buy and its extra coordination shows up as cost.
+
+The same layout with two jobs instead of three flips again: stop-and-wait deadlocks at 0/2 tasks (1 deadlock, 1 stall episode) while UBPA completes at 53 ticks with 0 conflicts. Neither policy dominates; which one is better depends on the layout and the job set, and the shipped benchmark is one point in that space, chosen because it forces the aisle contention the problem statement is about.
 
 ## Degraded radio (`results/degradation.json`)
 
@@ -136,7 +179,7 @@ Known limitation, stated before a judge finds it: the 8-robot point is the weak 
 
 Stop-and-wait is supposed to freeze on mutual path occupancy. That is why its distance is low and its wait fraction is ~1: robots barely move after the first conflict. UBPA travels farther because it finishes the jobs.
 
-Do **not** claim “X% faster.” The baseline never produced a finish time, so the percentage formula does not apply.
+Do **not** claim “X% faster.” The baseline never produced a finish time, so the percentage formula does not apply. E1 in particular invites one specific bad number: 800 (the tick limit the baseline hit) against 93 (UBPA's completion tick) is not an 88% improvement — 800 is the horizon the run was cut off at, not a measured finish. E1's claim is “the baseline never completed; UBPA completed 6/6 with 0 collisions and 0 deadlocks,” and nothing more.
 
 Re-run after any planner/collision change:
 

@@ -228,11 +228,15 @@ view answers every world access the robot performs with values equal to a same-s
 | `sim` (default, untouched) | `FleetSim` in-process | offline fallback, benchmark, `RUN_DEMO.bat` |
 | `edge-loopback` | `EdgeHost` lock-step, in-process agents | parity test `T1`, CI, no hardware needed |
 | `edge-lan` | `EdgeHost` + 3 agents over UDP on one PC | protocol/loss rehearsal before touching hardware |
-| `edge-pi` | `EdgeHost` on the PC + `run_edge_agent.py` on 3 Pis | the demo the problem statement is asking for — **not yet wired**: the shipped host drives its own in-process agents, so a separate agent process on a Pi is a protocol client that no host answers yet (doc 05 §10) |
+| `edge-pi` | `EdgeHost` on the PC + `run_edge_agent.py` on 3 Pis | the demo the problem statement is asking for — **built, rehearsed on one machine**: the host admits remote agents by the source address of their own `HELLO` and pins that address for the run (`RemoteAgentSession`); `edge-lan` and `edge-pi` are the same code path, so only the physical separation is unproven (doc 05 §10) |
 
-`sim`, `edge-loopback` and `edge-lan` are exercised by the shipped code and the test suite. `edge-pi` is a
-design target: the pieces exist (a standalone agent, a UDP transport, a heartbeat/HELLO handshake) but the
-host has no path that admits a remote agent, and this document says so rather than implying otherwise.
+All four variants are exercised by the shipped code and the test suite, and the agent side is hardened for the
+case where the host is not there: a UDP listen port already in use is refused at startup rather than silently
+shared (exit 2), and an agent nobody ever adopts gives up after `--adopt-timeout` seconds (default 60, `0`
+waits forever) instead of holding a port indefinitely (exit 3). A host that shuts down cleanly sends
+`CTRL_SHUTDOWN` (`EdgeHost.stop()`), so agents stop at once; a host that dies without that goodbye is covered
+by the agent's `--host-timeout`. The literal three-Pi wiring is the remaining engineering step — putting these
+processes on separate boxes — and this document says so rather than implying otherwise.
 
 Every variant shares the same `Robot` code and the same message vocabulary; only the transport and the
 pacing change. That is the "same robot logic runs locally or connects to the simulator" requirement.

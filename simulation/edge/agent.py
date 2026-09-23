@@ -22,9 +22,16 @@ expiry, so the numbers must be comparable. A tick is a clock, not a decision.
 
 from __future__ import annotations
 
+import os
+import sys
 import time
 from collections import deque
 from typing import Any, Iterable
+
+try:  # POSIX only: Windows ships no ``resource`` module.
+    import resource as _resource
+except ImportError:  # pragma: no cover - platform dependent
+    _resource = None  # type: ignore[assignment]
 
 from simulation.config import CoordinationFlags
 from simulation.edge.protocol import (
@@ -54,6 +61,21 @@ AGENT_VERSION = "edge-1"
 HEARTBEAT_TICKS = 8
 #: Ring size for the local step-time samples behind ``step_ms_p95``.
 _STEP_SAMPLES = 64
+
+
+def _split_addr(raw: Any) -> tuple[str, int] | None:
+    """Accept ``[host, port]``, ``(host, port)`` or ``"host:port"``; ``None`` if unusable."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        host, _, port = raw.rpartition(":")
+        raw = [host, port]
+    try:
+        host = str(raw[0]).strip()
+        port = int(raw[1])
+    except (IndexError, KeyError, TypeError, ValueError):
+        return None
+    return None if not host else (host, port)
 
 
 class EdgeAgent:
@@ -98,9 +120,20 @@ class EdgeAgent:
         self.acts_sent = 0
         self.acts_missing = 0
         self.ctrl_sent = 0
+        #: Robot id -> where that peer can be reached, as published by the host in
+        #: ``HELLO_WORLD.peers``. This is the robot's own peer table: the host
+        #: forwards an address, and the peer traffic still goes straight between
+        #: robots (doc 03 §2).
+        self.peer_addrs: dict[str, tuple[str, int]] = {}
+        self.peers_learned = 0
         #: ``sent_ms`` of the newest OBS, echoed back in ACT so the host can measure
         #: a real round trip instead of estimating one (doc 04 §1.4).
         self.obs_sent_ms: float | None = None
+        #: Wall clock of the newest CTRL frame the host sent. The clock the agent
+        #: obeys is the host's, so a host that has gone away has to be noticed in
+        #: wall-clock time: an adopted robot waiting for a tick that will never
+        #: come would otherwise loop forever holding its port (doc 04 §3.3).
+        self.last_host_ms = time.perf_counter()
         self.step_ms: deque[float] = deque(maxlen=_STEP_SAMPLES)
 
     # ----- construction -------------------------------------------------
@@ -147,12 +180,24 @@ class EdgeAgent:
         raised: a hostile or lossy link must not be able to stop the decision loop
         (doc 03 §7, doc 04 §3.2).
         """
-        applied = 0
+        decoded: list[dict[str, Any]] = []
         for raw in payloads:
             msg = decode_safe(raw)
             if msg is None:
                 self.malformed += 1
                 continue
+            decoded.append(msg)
+        return self.apply_frames(decoded)
+
+    def apply_frames(self, messages: Iterable[dict[str, Any]]) -> int:
+        """Reassemble already-decoded frames and route each complete message.
+
+        Every inbound path goes through here, because a ``HELLO_WORLD`` arrives as
+        several ``CHUNK`` envelopes and a plain message passes through the assembler
+        unchanged. Returns how many messages were consumed.
+        """
+        applied = 0
+        for msg in messages:
             try:
                 full = self.assembler.feed(msg)
             except ProtocolError:
@@ -182,6 +227,7 @@ class EdgeAgent:
         else:
             return False
         self.control_frames += 1
+        self.last_host_ms = time.perf_counter()
         return True
 
     def on_world(self, msg: dict[str, Any]) -> bool:
@@ -192,6 +238,10 @@ class EdgeAgent:
         elif hasattr(self.view, "apply_world"):
             self.view.apply_world(msg)
         self.world_epoch += 1
+        # The peer table travels with the geometry. Adopting it *before* the robot
+        # is built means the very first broadcast already reaches everyone the host
+        # has seen check in, whichever order the robots booted in.
+        self.learn_peers(msg.get("peers"))
         if self.pos is None:
             spawn = msg.get("spawn") or world.get("spawn")
             if spawn:
@@ -199,6 +249,41 @@ class EdgeAgent:
         self.install()
         self.last_seen_tick = max(self.last_seen_tick, int(msg.get("tick", 0)))
         return True
+
+    def learn_peers(self, roster: Any) -> int:
+        """Adopt the peer addresses the host has pinned, and return how many are new.
+
+        A robot can only unicast to peers it has been told about (``UdpRadio.peers``
+        is its whole routing table) and the host is never the relay, so reaching a
+        peer needs this one fact: *where* it is. The host knows it because it read the
+        source address of that robot's own datagram. Accepts the wire form
+        (``[[id, host, port], ...]``) or a ``{id: [host, port]}`` mapping.
+        """
+        if not roster:
+            return 0
+        if isinstance(roster, dict):
+            entries: Iterable[Any] = [(rid, raw) for rid, raw in roster.items()]
+        else:
+            entries = [(entry[0], entry[1:]) for entry in roster if entry]
+        learned = 0
+        for rid, raw in entries:
+            rid = str(rid)
+            if rid == self.id:
+                continue  # a robot is not its own peer
+            addr = _split_addr(raw)
+            if addr is None or addr[1] <= 0:
+                # No reachable port means no peer channel. Better to know nothing
+                # than to broadcast into a port nobody is listening on.
+                continue
+            previous = self.peer_addrs.get(rid)
+            self.peer_addrs[rid] = addr
+            if previous is None:
+                self.peers_learned += 1
+                learned += 1
+            add_peer = getattr(self.radio, "add_peer", None)
+            if add_peer is not None:
+                add_peer(rid, addr)
+        return learned
 
     def on_observation(self, msg: dict[str, Any]) -> bool:
         """Adopt the host's tick and refresh the local obstacle picture."""
@@ -246,13 +331,15 @@ class EdgeAgent:
         tick_method = getattr(radio, "tick", None)
         if tick_method is not None:
             tick_method(self.tick)
-        applied = 0
-        for msg in take():
-            if self.apply_control(msg):
-                applied += 1
-            else:
-                self.unknown_frames += 1
-        return applied
+        # ``take_control`` hands back *decoded* datagrams, not raw bytes, so they go
+        # through the same assembler the in-process path uses: a HELLO_WORLD is
+        # several CHUNK envelopes and must be put back together before it can be
+        # applied. Without this the robot would hear its geometry as garbage.
+        return self.apply_frames(take())
+
+    def host_silence_s(self) -> float:
+        """Seconds since the host last said anything, or since this agent booted."""
+        return max(0.0, time.perf_counter() - self.last_host_ms)
 
     def send_to_host(self, msg: dict[str, Any]) -> bool:
         """Send one CTRL message to the host. No-op on the in-process medium."""
@@ -418,6 +505,7 @@ class EdgeAgent:
             "world_epoch": self.world_epoch,
             "tick": self.tick,
             "last_seen_tick": self.last_seen_tick,
+            "host_silence_s": round(self.host_silence_s(), 2),
             "uptime_s": round(time.perf_counter() - self.started_ms, 2),
             "step_ms_p95": round(self.step_ms_p95, 4),
             "step_samples": len(self.step_ms),
@@ -427,6 +515,8 @@ class EdgeAgent:
             "oversize": self.oversize,
             "hello_sent": self.hello_sent,
             "hello_ok": self.hello_ok,
+            "peers_learned": self.peers_learned,
+            "peers_known": sorted(self.peer_addrs),
             "acts_sent": self.acts_sent,
             "acts_missing": self.acts_missing,
             "ctrl_sent": self.ctrl_sent,
@@ -447,7 +537,7 @@ class EdgeAgent:
                 "stall_handoffs": robot.stall_handoffs,
                 "tasks_done": robot.tasks_done,
                 "known_tasks": {tid: kt.status for tid, kt in robot.known_tasks.items()},
-                "peers": sorted(robot.peers),
+                "peers": sorted(robot.peers),  # heard directly, peer-to-peer
                 "auctions": sorted(robot.auctions),
                 "step_n": robot.step_n,
             },
@@ -459,4 +549,93 @@ class EdgeAgent:
             closer()
 
 
-__all__ = ["AGENT_VERSION", "HEARTBEAT_TICKS", "EdgeAgent"]
+def _proc_rss_kb() -> int | None:
+    """Resident set size in KiB, from ``/proc/self/statm``. ``None`` where absent.
+
+    ``/proc`` is Linux-only, which is exactly the platform this measurement
+    exists for (Raspberry Pi OS). Anywhere else the honest answer is ``None``.
+    """
+    try:
+        with open("/proc/self/statm", "r", encoding="ascii") as fh:
+            pages = int(fh.read().split()[1])
+    except (OSError, IndexError, ValueError):
+        return None
+    page_size = 4096
+    sysconf = getattr(os, "sysconf", None)
+    if sysconf is not None:
+        try:
+            page_size = int(sysconf("SC_PAGE_SIZE"))
+        except (ValueError, OSError):  # pragma: no cover - exotic libc
+            page_size = 4096
+    return (pages * page_size) // 1024
+
+
+def process_resources(wall_s: float | None = None) -> dict[str, Any]:
+    """This process's own CPU and resident memory, as far as the platform allows.
+
+    Diagnostics only: like :meth:`EdgeAgent.telemetry`, nothing here is fed back
+    into a decision, so measuring it cannot change a route or a winner.
+
+    It exists because requirement 10 asks for *CPU time per robot tick* against
+    the baseline, and on the Raspberry Pi that number has to come from the node
+    itself - the host cannot read another machine's RSS.
+
+    Stdlib only, in the order the platforms allow:
+
+    * CPU - ``resource.getrusage(RUSAGE_SELF)``: user + system seconds, plus a
+      percentage of one core when the caller passes the process wall time.
+    * RAM - ``/proc/self/statm`` resident pages (Linux, hence Pi OS).
+
+    A measurement the platform cannot make is returned as ``None`` with
+    ``available: false`` and a ``reason``. A missing number is reported as
+    missing, never as zero, so a Windows rehearsal can never be mistaken for Pi
+    evidence.
+    """
+    out: dict[str, Any] = {
+        "platform": sys.platform,
+        "pid": os.getpid(),
+        "cpu_count": os.cpu_count(),
+        "available": False,
+        "reason": None,
+        "cpu_user_s": None,
+        "cpu_sys_s": None,
+        "cpu_total_s": None,
+        "cpu_pct_of_core": None,
+        "rss_kb": None,
+        "rss_mb": None,
+        "load_avg_1m": None,
+    }
+    missing: list[str] = []
+
+    if _resource is not None:
+        usage = _resource.getrusage(_resource.RUSAGE_SELF)
+        user, system = float(usage.ru_utime), float(usage.ru_stime)
+        total = user + system
+        out["cpu_user_s"] = round(user, 6)
+        out["cpu_sys_s"] = round(system, 6)
+        out["cpu_total_s"] = round(total, 6)
+        if wall_s and wall_s > 0:
+            out["cpu_pct_of_core"] = round(100.0 * total / float(wall_s), 4)
+    else:
+        missing.append("cpu (no `resource` module on this platform)")
+
+    rss_kb = _proc_rss_kb()
+    if rss_kb is None:
+        missing.append("rss (no /proc/self/statm on this platform)")
+    else:
+        out["rss_kb"] = rss_kb
+        out["rss_mb"] = round(rss_kb / 1024.0, 3)
+
+    getloadavg = getattr(os, "getloadavg", None)
+    if getloadavg is not None:
+        try:
+            out["load_avg_1m"] = round(float(getloadavg()[0]), 3)
+        except OSError:  # pragma: no cover - and not worth failing a run over
+            pass
+
+    out["available"] = not missing
+    out["reason"] = None if not missing else "unavailable: " + "; ".join(missing)
+    return out
+
+
+__all__ = ["AGENT_VERSION", "HEARTBEAT_TICKS", "EdgeAgent", "process_resources"]

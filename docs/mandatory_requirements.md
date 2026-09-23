@@ -12,7 +12,7 @@ These must work before any extra feature is added.
 7. **Replanning** when a sensed/broadcast obstacle blocks the path.
 8. **Task reassignment** when the current holder cannot reach the pick/drop (release + re-auction).
 9. **Chaos input:** operator can block a cell/aisle live.
-10. **Measured metrics vs stop-and-wait baseline:** collisions, deadlocks, task completion time, waiting time, distance, communication latency, CPU time per robot tick.
+10. **Measured metrics vs stop-and-wait baseline:** collisions, deadlocks, task completion time, waiting time, distance, communication latency, CPU time per robot tick (measured by each edge node from its own process counters via `process_resources`, reported in the `summary`/`host_summary` JSON written by `--summary-json`; on the Windows dev host this reads **not measured**, since the platform exposes neither `resource` nor `/proc`).
 
 ## Explicitly forbidden
 

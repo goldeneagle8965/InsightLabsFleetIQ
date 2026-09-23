@@ -1,6 +1,6 @@
 # SIH26123 — Edge-AI Distributed Fleet Coordination
 
-Three to eight AMRs. Four indoor floors. No central dispatcher. Each robot broadcasts pose and path, auctions work, yields with an explicit UBPA rule, and decides on its own when to break off and charge.
+Three to eight AMRs. Four selectable floor plans, each single-level (warehouse, mall, hospital, restaurant). No central dispatcher. Each robot broadcasts pose and path, auctions work, yields with an explicit UBPA rule, and decides on its own when to break off and charge.
 
 Python 3.10+, standard library only — no install step, no build step, no service to configure.
 
@@ -96,7 +96,7 @@ Work down the list in order; each beat builds on the one before it. All of it is
 | 7 | Open **Job board → Inject a job** | Add work at runtime instead of editing a queue: type pick/drop/urgency, or press **Set pick from map** / **Set drop from map** and click the floor. The job is announced over the radio and robot bids appear in **Being decided right now**. Invalid drops (inside a rack) are rejected with the cell named — that validation is deliberate, not a silent no-op. |
 | 8 | Drag a robot's battery in **Charging station** | Drain a robot below its reserve: it abandons the queue, drives to the charger, charges, and resumes — all decided on the robot, not by the UI. |
 | 9 | Slide **Simulation speed** (0.25× → 16×), then **Pause** / **Step 1 tick** / **Reset** (keys `space` / `s` / `r`) | Pause freezes the clock so you can talk over a moment; step advances exactly one tick; reset returns to the same seed. |
-| 10 | Drag **Packet loss** to 40% | Peer broadcasts start dropping and `delivered · dropped` moves. Robots that miss a pose update wait rather than guess: measured over 5 seeds, the same 6/6 tasks still finish, just later — 137–196 ticks instead of 93, with 0 deadlocks. |
+| 10 | Drag **Packet loss** to 40% | Peer broadcasts start dropping and `delivered · dropped` moves. Robots that miss a pose update wait rather than guess: measured over 5 seeds, the same 6/6 tasks still finish, just later — 137–196 ticks instead of 93, with 0.2 deadlock timeouts on average (one seed of five). |
 | 11 | Drag **Broadcast delay** to 3 ticks | Intent arrives stale, so yields happen later. Measured: 6/6 tasks, 0 deadlocks, 0 intention conflicts, finish tick 103 (93 at delay 1). Removing the age-corrected peer reservations alone still finishes 6/6, but at 94 ticks with 3 intention conflicts; with every resilience fix off, the same slider stops at 3/6 tasks with 577 intention conflicts (`results/probe_26123_ablation.json`). |
 | 12 | Press **Forecast ETA** | Runs the current fleet forward and reports the finish estimate for this floor, fleet size and job set — a prediction from the live run, not a fixed number. |
 | 13 | Click **Stop-and-wait** under *Coordination policy* | Resets the same floor under the baseline. Two robots meet in the aisle, neither yields, and `tasks_done` stalls — exactly the failure UBPA exists to prevent. Switch back to **UBPA**. |
@@ -128,15 +128,23 @@ python scripts/run_experiments.py
 
 Writes `results/metrics.json` and prints the comparison table. Fixed seeds mean re-running reproduces every decision metric exactly — tasks, ticks, deadlocks, collisions, distance, wait, comm latency. The only field that moves is `mean_robot_step_ms`, because that one is wall-clock on your machine.
 
+That reproducibility is also the limit of what the seeds prove: on E1 all five seeds return the *same* outcome metrics for both policies, so they are a determinism check, **not five independent trials**. Only the degraded-radio and scale sweeps vary anything real (the scenario), and those are the tables that show ranges.
+
 Last measured run (tick limit 800; means across seeds):
 
 | experiment | stop-and-wait | UBPA |
 |---|---|---|
-| E1 throughput | incomplete (0/6 tasks, 2 deadlocks) | **93 ticks, 6/6, 0 deadlocks** |
+| E1 completion & robustness | incomplete (0/6 tasks, 2 deadlocks) | **93 ticks, 6/6, 0 deadlocks** |
 | E2 head-on | incomplete (1/3 tasks, 2 deadlocks) | **50 ticks, 3/3, 0 deadlocks** |
 | E3 aisle block at t=16 | incomplete (3/6 tasks, 3 deadlocks) | **99 ticks, 6/6, 0 deadlocks** |
 
 `improvement` is `null` throughout the JSON on purpose: the baseline never finished inside the tick limit, so every percentage would be meaningless (`comparable=false`). Raw values only. The full table, per-seed runs and the reasoning: `docs/evaluation.md`.
+
+Three readings to avoid:
+
+- **No percentage comes out of this table**, and one specific bad number exists: 800 vs 93 is not an 88% improvement, because 800 is the horizon the baseline was cut off at, not a finish time. UBPA's claim is “the baseline never completed; UBPA completed 6/6 with 0 collisions and 0 deadlocks.”
+- `collisions` counts **conflicting claims per tick** (deduplicated per robot pair per tick), not robot-on-robot contact and not elapsed conflict time; a three-way claim for one cell counts as two pairs. Both policies are scored by the same rule.
+- `0 collisions` for UBPA is true **on this layout**. E1 is one point in the space: on a low-contention aisle layout with three short jobs, stop-and-wait finishes in 47 ticks with 1 conflict while UBPA takes 58 with 4. The reproduction snippet and the measurements are in `docs/evaluation.md`; the shipped benchmark was chosen because it forces the aisle contention the problem statement is about.
 
 The re-measure button was verified end to end on the machine this was written on: job `exit_code: 0` in 4.4 s, `results/remeasure_metrics.json` rewritten, the shipped `results/metrics.json` byte-identical afterwards, and all three experiments reporting `match: true` — every tick-count headline metric reproduced exactly, with only `mean_robot_step_ms` differing (`0.1558` shipped vs `0.1147` now) and correctly excluded from the match.
 
@@ -147,7 +155,7 @@ The two sliders in the Operator console are not decoration: `scripts/run_degrada
 | scenario | UBPA outcome (means over 5 seeds) |
 |---|---|
 | clean (0% loss, 1 tick delay) | 6/6 tasks, 0 deadlocks, finishes tick 93 |
-| 40% packet loss | **still 6/6, 0 deadlocks**, finishes in 137–196 ticks |
+| 40% packet loss | **still 6/6** (0.2 deadlock timeouts on average), finishes in 137–196 ticks |
 | 70% packet loss | still 6/6, 0.6 deadlocks on average, finishes in 141–213 ticks |
 | 3 tick radio delay | 6/6 tasks, 0 deadlocks, 0 intention conflicts, finishes tick 103 |
 | 40% loss + 3 tick delay | still 6/6, finishes in 99–177 ticks |
@@ -194,30 +202,48 @@ The 8-robot point is the honest weak spot and is not a rounding error: two robot
 
 ```bash
 python -m unittest tests.test_mandatory tests.test_dashboard_contract tests.test_web_entry
+# edge suite (adds robot processes, real UDP sockets and the no-central-scheduler guards)
+python -m unittest tests.test_edge_agent tests.test_edge_no_central_scheduler tests.test_edge_lan_integration
+python -m unittest tests.test_dashboard_is_not_required_for_decision
 ```
 
-25 tests, `Ran 25 tests ... OK`.
+91 tests, all OK. `tests/` has no `__init__.py`, so `unittest discover` is not used — run the modules individually:
+
+```bash
+for m in test_mandatory test_dashboard_contract test_dashboard_is_not_required_for_decision \
+         test_web_entry test_edge_agent test_edge_no_central_scheduler test_edge_lan_integration; do
+  python -m unittest tests.$m; done
+```
 
 | file | tests | what it locks down |
 |---|---|---|
 | `tests/test_mandatory.py` | 9 | the problem statement's hard requirements: peer-broadcast schema, auction-winner validity, the two forbidden patterns (no central scheduler, no hardcoded winner), UBPA yielding, baseline deadlock recording, live block → replan, unreachable-pick release |
 | `tests/test_dashboard_contract.py` | 6 | the dashboard API contract, looped over all four floors and fleets of 3/5/8: snapshot schema, every action (`policy`, `env`, `robots`, `speed`, `radio`, `add_task`, `remove_task`, `drain`, `block_aisle`, `toggle`, `clear_blocks`, `pause`, `step`, `reset`, `forecast`), shadow-twin output, and that a rejected job is rejected with a named reason |
 | `tests/test_web_entry.py` | 10 | the hosting path: env/arg parsing, loopback round trip through `serve_sessions`, per-visitor cookie isolation (two visitors never share a fleet), `/health` and 404 behaviour |
+| `tests/test_dashboard_is_not_required_for_decision.py` | 7 | the fleet runs and completes with the dashboard never attached — the UI is a spectator, not a dependency |
+| `tests/test_edge_agent.py` | 30 | the edge stack: T1 lock-step parity with `FleetSim`, world-adapter fidelity, codec/hostile input, host-cannot-move-a-robot, agent death, 40/70% loss, benchmark digest, offline fallback, link telemetry |
+| `tests/test_edge_no_central_scheduler.py` | 12 | the static (AST) and behavioural guards that the host and dashboard never choose a winner, plan a route or override a robot |
+| `tests/test_edge_lan_integration.py` | 17 | three real interpreters over real UDP: host admits by source address, every robot decides every tick, a robot dies mid-run and rejoins, duplicate claim and rebind rules, a second process on a live port exits 2, an unadopted agent gives up with exit 3 |
 
-They run in under two seconds and need no network beyond loopback.
+The first three run in under two seconds and need no network beyond loopback; the edge LAN suite spends ~10 s starting and stopping real processes.
 
 ## Layout
 
 ```
 simulation/   engine, robot, peer radio bus, space-time planner, UBPA rule, maps, metrics, scenarios, dashboard
+simulation/edge/  the distributed stack: protocol, worldview, UdpRadio, EdgeAgent, EdgeHost, sessions
 frontend/     dashboard UI served by simulation/dashboard.py (stdlib http.server)
 scripts/      run_demo.py, run_web.py, run_experiments.py, run_degradation.py, build_pptx.py,
-              probe_26123_stall_diag.py, probe_26123_scale_delay.py, probe_26123_ablation.py
+              probe_26123_stall_diag.py, probe_26123_scale_delay.py, probe_26123_ablation.py,
+              run_edge_host.py, run_edge_agent.py, edge_hw_summary.py, check_edge_deploy.py
 results/      metrics.json, degradation.json — measured, regenerated by scripts/
               probe_26123_scale_delay.json, probe_26123_ablation.json — scale + fix attribution
-tests/        test_mandatory.py, test_dashboard_contract.py, test_web_entry.py
+tests/        test_mandatory.py, test_dashboard_contract.py, test_web_entry.py,
+              test_dashboard_is_not_required_for_decision.py, test_edge_agent.py,
+              test_edge_no_central_scheduler.py, test_edge_lan_integration.py
 docs/         problem analysis, requirements, architecture, methodology,
               measured evaluation, demo script, slide outline, hardware feasibility, both decks
+docs/edge/    00-07: the Raspberry Pi deployment pack (architecture, protocol, failure modes, test plan)
 ```
 
 Deployment files live in the repo root: `Dockerfile`, `.dockerignore`, `Procfile`, `render.yaml`, `RUN_WEB.bat`, `RUN_DEMO.bat`.

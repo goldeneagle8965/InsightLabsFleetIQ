@@ -240,6 +240,16 @@ class LoopbackRadio:
 # --- real UDP -----------------------------------------------------------
 
 
+class RadioPortInUse(OSError):
+    """The listen port is already owned by another radio.
+
+    On the LAN an agent's port *is* its identity: the host pins the address from
+    that agent's own ``HELLO``, so two processes sharing one port would have the
+    fleet's datagrams split between them. This is raised instead of quietly
+    sharing the port (doc 03 §2).
+    """
+
+
 class UdpRadio:
     """Real peer-to-peer UDP for edge agents.
 
@@ -274,8 +284,23 @@ class UdpRadio:
         self._closed = False
         self.sock = sock or socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setblocking(False)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind(listen)
+        # Bound exclusively: under Windows (and BSD sockets in general) a UDP
+        # socket created with SO_REUSEADDR can bind an address another socket
+        # already owns, and the kernel then hands datagrams to whichever
+        # process it likes. A second agent started on a busy port must fail
+        # loudly, not steal half the traffic.
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        try:
+            self.sock.bind(listen)
+        except OSError as exc:  # pragma: no cover - platform wording differs
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            raise RadioPortInUse(
+                f"UDP port {listen[0]}:{listen[1]} is already in use by another "
+                f"socket; a second agent cannot share a listen port"
+            ) from exc
         self.host_addr: tuple[str, int] | None = None
 
     # ----- discovery ----------------------------------------------------
@@ -434,6 +459,7 @@ def host_bulletin(task_msg: dict[str, Any], tick: int) -> dict[str, Any]:
 
 __all__ = [
     "LoopbackRadio",
+    "RadioPortInUse",
     "SharedMedium",
     "UdpRadio",
     "attach_loopback",
