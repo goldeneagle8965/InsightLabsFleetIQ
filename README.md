@@ -1,4 +1,4 @@
-# SIH26123 — Edge-AI Distributed Fleet Coordination
+# InsightLabsFleetIQ
 
 Three to eight AMRs. Four selectable floor plans, each single-level (warehouse, mall, hospital, restaurant). No central dispatcher. Each robot broadcasts pose and path, auctions work, yields with an explicit UBPA rule, and decides on its own when to break off and charge.
 

@@ -1,6 +1,6 @@
 """T7/T8 - neither the host nor the dashboard may make a fleet decision.
 
-The strongest version of the project's central claim ("directly, through the peer
+("directly, through the peer
 broadcast", not "through a scheduler") is a static one: the host has no vocabulary
 and no writable attributes with which to choose a winner, order a cost, or route a
 robot. ``TestHostHasNoDecisionVocabulary`` proves that by reading the source of
